@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardápio Inteligente (v5.6 - Standalone)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React, ReactDOM, and Babel CDNs for JSX execution in browser -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        /* Definindo a fonte Inter (Tailwind default is applied, but ensuring compatibility) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        html, body, #root {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body class="bg-[#0a0a1a]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        /**
+         * MVP – Cardápio Inteligente (v5.6 - Multi-Dia e Duplicação)
+         * * Arquivo Standalone - Convertido de JSX para HTML/Babel.
+         * - Implementação do Estado Multi-Dia: O planejamento agora é armazenado em um mapa 'allDays'.
+         * - Controle de Dia: Adicionado 'currentDayId' e um seletor para alternar entre planos.
+         * - Duplicação de Plano: Adicionado botão "Duplicar Plano" que copia o dia atual para um novo.
+         * - Persistência Segura: 'allDays', 'currentDayId' e 'slotKeys' são persistidos e carregados de forma segura.
+         */
+
+        const { useMemo, useState, useEffect } = React;
+
+        // ---------- Utilidades de Storage ----------
+        const PROFILE_STORAGE_KEY = "cardapio_profile_v5_3";
+        const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_6";
+        const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_6";
+        const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_6";
+
+        // ID inicial e estável para o primeiro dia
+        const INITIAL_DAY_ID = 'day-1';
+
+        /**
+         * Define as faixas válidas e passos para inputs numéricos do perfil.
+         */
+        const INPUT_RANGES = {
+            age: { min: 10, max: 120, step: 1 },
+            weight: { min: 30, max: 300, step: 0.5 },
+            height: { min: 100, max: 250, step: 1 },
+            neck: { min: 20, max: 60, step: 0.5 },
+            waist: { min: 40, max: 150, step: 0.5 },
+            hip: { min: 50, max: 150, step: 0.5 },
+        };
+
+        /**
+         * Sanitiza e valida o valor de entrada em relação às faixas válidas.
+         */
+        function normalizeAndValidateInput(key, value) {
+            const range = INPUT_RANGES[key];
+            
+            // 1. Coerce para Number e trata NaN (string vazia de input, por exemplo)
+            let numericValue = Number(value);
+            if (isNaN(numericValue) || value === null) {
+                numericValue = 0;
+            }
+
+            // 2. Validação de faixa (clamping)
+            if (range) {
+                if (numericValue !== 0 && numericValue < range.min) {
+                     // Clampa para o mínimo, mas permite 0 (para campos temporariamente vazios)
+                    return range.min; 
+                }
+                if (numericValue > range.max) {
+                    return range.max; // Clampa para o máximo
+                }
+            }
+            
+            return numericValue;
+        }
+
+
+        const loadState = (key, defaultState) => {
+            try {
+                const serializedState = localStorage.getItem(key);
+                if (serializedState === null || serializedState === "undefined") {
+                    return defaultState;
+                }
+                const state = JSON.parse(serializedState);
+
+                // HYDRATION SAFETY CHECK for PROFILE
+                if (key === PROFILE_STORAGE_KEY) {
+                    const validatedProfile = { ...state };
+                    let needsReset = false;
+                    
+                    // 1. Validar campos numéricos
+                    Object.keys(INPUT_RANGES).forEach(k => {
+                        const range = INPUT_RANGES[k];
+                        let val = Number(state[k]);
+                        
+                        // Se o valor armazenado é NaN ou fora da faixa aceitável, usa o padrão.
+                        if (isNaN(val) || val < range.min || val > range.max) {
+                            validatedProfile[k] = DEFAULT_PROFILE[k];
+                            needsReset = true;
+                        }
+                    });
+                    
+                    // 2. Validar campos de enum (sex/goal)
+                    if (!['M', 'F'].includes(state.sex)) {
+                        validatedProfile.sex = DEFAULT_PROFILE.sex;
+                        needsReset = true;
+                    }
+                    if (!['loss', 'maintain', 'gain', 'recomp'].includes(state.goal)) {
+                        validatedProfile.goal = DEFAULT_PROFILE.goal;
+                        needsReset = true;
+                    }
+                    
+                    if (needsReset) {
+                        console.warn("Estado do Perfil restaurado para valores padrão em alguns campos devido a dados persistidos inválidos.");
+                    }
+                    return validatedProfile;
+                }
+
+                return state;
+            } catch (e) {
+                console.error("Erro ao carregar estado do localStorage:", key, e);
+                return defaultState;
+            }
+        };
+
+        const saveState = (key, state) => {
+            try {
+                const serializedState = JSON.stringify(state);
+                localStorage.setItem(key, serializedState);
+            } catch (e) {
+                console.error("Erro ao salvar estado no localStorage:", key, e);
+            }
+        };
+        // ------------------------------------------
+
+        // ---------- Utilidades Nutricionais e Fórmulas de Cálculo ----------
+        const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
+
+        function round(n, d = 0) {
+            const p = Math.pow(10, d);
+            return Math.round(n * p) / p;
+        }
+
+        // Calcula TMB (Mifflin-St Jeor)
+        function calcBMR({ sex, weight, height, age }) {
+            const s = sex === "F" ? -161 : 5;
+            return 10 * weight + 6.25 * height - 5 * age + s;
+        }
+
+        // Calcula TDEE (Gasto Energético Total)
+        function calcTDEE(bmr, activity) {
+            const factors = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very: 1.9 };
+            return bmr * (factors[activity] || 1.55);
+        }
+
+        // Ajusta o TDEE para o objetivo calórico
+        function adjustForGoal(tdee, goal) {
+            if (goal === "loss") return tdee * 0.85;
+            if (goal === "gain") return tdee * 1.1;
+            // Objetivo "recomp" (recomposição) usa 5% de déficit (~0.95)
+            if (goal === "recomp") return tdee * 0.95; 
+            return tdee; // maintain
+        }
+
+        // Deriva as metas de macronutrientes
+        function deriveMacroTargets({ weight, calories }) {
+            const proteinG = 1.8 * weight;
+            const fatG = 0.8 * weight;
+            const kcalProtein = proteinG * KCAL_PER_G.protein;
+            const kcalFats = fatG * KCAL_PER_G.fats;
+            const kcalCarbs = Math.max(0, calories - kcalProtein - kcalFats);
+            const carbG = kcalCarbs / KCAL_PER_G.carbs;
+            return { protein: round(proteinG), fats: round(fatG), carbs: round(carbG) };
+        }
+
+        /** Fórmula US Navy (em polegadas).
+         * Masculino: 86.010*log10(cintura - pescoço) - 70.041*log10(altura) + 36.76
+         * Feminino: 163.205*log10(cintura + quadril - pescoço) - 97.684*log10(altura) - 78.387
+         */
+        function calcBF({ sex, height, neck, waist, hip }) {
+            const CM_TO_INCH = 0.393701;
+            // Garante que todas as medidas são convertidas
+            const h = (height || 0) * CM_TO_INCH;
+            const n = (neck || 0) * CM_TO_INCH;
+            const w = (waist || 0) * CM_TO_INCH;
+            const hp = (hip || 0) * CM_TO_INCH;
+
+            if (h <= 0 || n <= 0 || w <= 0) return null;
+            if (sex === "F" && hp <= 0) return null; // Quadril é obrigatório para o cálculo feminino
+
+            try {
+                if (sex === "M") {
+                    const factor = w - n;
+                    if (factor <= 0) return null; // Dados inconsistentes (cintura menor ou igual ao pescoço)
+                    const bf = 86.010 * Math.log10(factor) - 70.041 * Math.log10(h) + 36.76;
+                    return Math.max(3, bf); 
+                } else {
+                    const factor = w + hp - n;
+                    if (factor <= 0) return null; // Dados inconsistentes
+                    const bf = 163.205 * Math.log10(factor) - 97.684 * Math.log10(h) - 78.387;
+                    return Math.max(8, bf); 
+                }
+            } catch {
+                return null; // Captura Math.log10(0) ou outros erros matemáticos
+            }
+        }
+
+
+        /**
+         * Função para calcular macros e calorias de um item (ingrediente).
+         * Prioriza baseKcal se fornecido para maior verossimilhança nutricional.
+         */
+        function calculateMealMacros(entry) {
+            const p = entry.protein || 0;
+            const c = entry.carbs || 0;
+            const f = entry.fats || 0;
+            
+            // Prioriza baseKcal se presente, senão deriva por 4/4/9
+            const baseKcal = entry.baseKcal || (p * KCAL_PER_G.protein + c * KCAL_PER_G.carbs + f * KCAL_PER_G.fats);
+            
+            const portion = entry.portion || 1; 
+
+            return {
+                kcal: baseKcal * portion,
+                protein: p * portion,
+                carbs: c * portion,
+                fats: f * portion,
+            };
+        }
+
+
+        // ---------- Base de Refeições DESMEMBRADAS (Tags padronizadas e BR adicionada) ----------
+        const MEALS = [
+            // 150~250 kcal – Snacks Rápidos / Pré-Cama / Baixa Caloria
+            {
+                id: "whey_agua",
+                name: "Whey Protein Isolado (Água)",
+                block: "250",
+                tags: ["High Protein", "Low Carb", "Quick"],
+                ingredients: [
+                    { name: "Whey Protein (1 Scoop)", protein: 25, carbs: 5, fats: 4, baseKcal: 155 },
+                ]
+            },
+            {
+                id: "shake_caseina",
+                name: "Shake de Caseína (Pré-Cama)",
+                block: "250",
+                tags: ["High Protein", "Low Carb"],
+                ingredients: [
+                    { name: "Caseína/Whey", protein: 30, carbs: 4, fats: 3, baseKcal: 170 },
+                ]
+            },
+            {
+                id: "ovo_cozido",
+                name: "2 Ovos Cozidos",
+                block: "250",
+                tags: ["High Protein", "Low Carb", "High Fat"],
+                ingredients: [
+                    { name: "Ovo Cozido (2 unid.)", protein: 12, carbs: 1, fats: 10, baseKcal: 140 },
+                ]
+            },
+            {
+                id: "fruta_pasta_amendoim",
+                name: "Banana + Pasta de Amendoim",
+                block: "250",
+                tags: ["High Carb", "Balanced", "Plant-Based"],
+                ingredients: [
+                    { name: "Banana (média)", protein: 1, carbs: 27, fats: 0, baseKcal: 105 },
+                    { name: "Pasta de Amendoim (1 col. sopa)", protein: 6, carbs: 8, fats: 8, baseKcal: 145 },
+                ]
+            },
+            
+            // 350~360 kcal – Lanches/Café
+            {
+                id: "tapioca_ovo_queijo",
+                name: "Tapioca c/ Ovos e Queijo Minas",
+                block: "350",
+                tags: ["Balanced", "Quick", "BR"],
+                ingredients: [
+                    { name: "Massa de Tapioca (40g)", protein: 0, carbs: 35, fats: 0, baseKcal: 140 },
+                    { name: "2 Ovos + 1 Clara", protein: 18, carbs: 0, fats: 10, baseKcal: 160 },
+                    { name: "Queijo Minas (30g)", protein: 7, carbs: 0, fats: 5, baseKcal: 60 }
+                ]
+            },
+            {
+                id: "shake_prot_pos",
+                name: "Shake Pós-Treino Rápido (Completo)",
+                block: "350",
+                tags: ["High Protein", "Post-Workout", "High Carb"],
+                ingredients: [
+                    { name: "Whey Protein (1 Scoop)", protein: 25, carbs: 5, fats: 4, baseKcal: 155 },
+                    { name: "Banana (pequena)", protein: 1, carbs: 23, fats: 0, baseKcal: 90 },
+                    { name: "Aveia (1 col. sopa)", protein: 4, carbs: 12, fats: 2, baseKcal: 80 }
+                ]
+            },
+            {
+                id: "iogurte_prot_fruta",
+                name: "Iogurte Proteico + Aveia e Fruta",
+                block: "350",
+                tags: ["Balanced", "Quick"],
+                ingredients: [
+                    { name: "Iogurte Natural/Grego (170g)", protein: 10, carbs: 15, fats: 9, baseKcal: 180 },
+                    { name: "Aveia (15g)", protein: 3, carbs: 9, fats: 1, baseKcal: 60 },
+                    { name: "Banana (média)", protein: 1, carbs: 27, fats: 0, baseKcal: 105 }
+                ]
+            },
+            
+            // 460–500 kcal – Almoço/Jantar (Padrão)
+            {
+                id: "frango_arroz_feijao_padrao",
+                name: "Frango, Arroz, Feijão (Almoço Padrão)", 
+                block: "500",
+                tags: ["Balanced", "High Protein", "BR"],
+                ingredients: [
+                    { name: "Arroz Integral Cozido (100g)", protein: 2, carbs: 28, fats: 1, baseKcal: 130 },
+                    { name: "Feijão Cozido (100g)", protein: 5, carbs: 15, fats: 1, baseKcal: 100 },
+                    { name: "Peito de Frango Grelhado (120g cru)", protein: 34, carbs: 0, fats: 5, baseKcal: 180 },
+                    { name: "Azeite (1 col. chá)", protein: 0, carbs: 0, fats: 5, baseKcal: 45 },
+                    { name: "Salada e Legumes (Livre)", protein: 2, carbs: 5, fats: 0, baseKcal: 30 }
+                ]
+            },
+            {
+                id: "salmao_quinoa_espinafre",
+                name: "Salmão Grelhado c/ Quinoa e Espinafre",
+                block: "500",
+                tags: ["High Fat Saudável", "Balanced"],
+                ingredients: [
+                    { name: "Salmão Grelhado (100g)", protein: 25, carbs: 0, fats: 15, baseKcal: 240 },
+                    { name: "Quinoa Cozida (80g)", protein: 3, carbs: 14, fats: 1, baseKcal: 80 },
+                    { name: "Espinafre Refogado (Livre)", protein: 3, carbs: 5, fats: 5, baseKcal: 70 },
+                    { name: "Azeite (1 col. sopa)", protein: 0, carbs: 0, fats: 13, baseKcal: 117 }
+                ]
+            },
+            
+            // 700–750 kcal – Opção de Alta Energia / Pós-Treino / Bulk
+            {
+                id: "massa_pesto_frango_azeitonas",
+                name: "Massa Integral c/ Pesto, Frango e Azeitonas",
+                block: "750",
+                tags: ["High Carb", "High Protein", "Post-Workout"],
+                ingredients: [
+                    { name: "Massa Integral Cozida (150g)", protein: 7, carbs: 45, fats: 2, baseKcal: 230 },
+                    { name: "Peito de Frango Picado (150g)", protein: 40, carbs: 0, fats: 6, baseKcal: 226 },
+                    { name: "Molho Pesto (2 col. sopa)", protein: 5, carbs: 5, fats: 20, baseKcal: 220 },
+                    { name: "Tomate Seco e Azeitonas", protein: 0, carbs: 5, fats: 6, baseKcal: 70 }
+                ]
+            },
+        ];
+
+        // Re-soma os macros para exibição na biblioteca
+        const MEALS_WITH_TOTALS = MEALS.map(meal => {
+            // Note: calculateMealMacros is run with portion: 1 implicitly here
+            const totals = meal.ingredients.reduce((acc, ingredient) => {
+                const macros = calculateMealMacros({ ...ingredient, portion: 1 });
+                acc.protein += macros.protein;
+                acc.carbs += macros.carbs;
+                acc.fats += macros.fats;
+                acc.kcal += macros.kcal;
+                return acc;
+            }, { protein: 0, carbs: 0, fats: 0, kcal: 0 });
+
+            return { ...meal, ...totals };
+        });
+
+        const TAGS = [
+            "High Protein", "Low Carb", "High Carb", "Plant-Based", "Balanced", 
+            "High Fat Saudável", "Low Protein", "High Fat", "Post-Workout", "Quick", "Bulk", "BR"
+        ];
+
+        const PORTION_OPTIONS = [0.5, 1, 1.5, 2]; // 0.5x, 1x, 1.5x, 2x
+
+        // Componente para o botão de Minimizar/Maximizar (Com ARIA e Foco)
+        const MinimizeButton = ({ isMinimized, toggleMinimize }) => (
+            <button
+                onClick={toggleMinimize}
+                className="text-slate-400 hover:text-slate-200 transition p-1 rounded-full bg-slate-700/50 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                title={isMinimized ? "Expandir seção" : "Minimizar seção"}
+                aria-label={isMinimized ? "Expandir seção" : "Minimizar seção"}
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    {isMinimized ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path>
+                    )}
+                </svg>
+            </button>
+        );
+
+
+        // ---------- Componentes Visuais Simples (Stat, Pill, Section) ----------
+
+        function Stat({ label, value, unit = "", target }) {
+            const pct = Math.min(100, Math.max(0, (value / (target || 1)) * 100));
+            const ok = target ? value <= target * 1.05 : true; // Tolerância de 5%
+            return (
+                <div className="mb-3">
+                    <div className="flex justify-between text-sm text-slate-300">
+                        <span>{label}</span>
+                        <span>
+                            <strong className={ok ? "text-green-400" : "text-red-400"}>
+                                {round(value, 0)}{unit}
+                            </strong>
+                            {target && (
+                                <span className="text-slate-400"> / {round(target, 0)}{unit}</span>
+                            )}
+                        </span>
+                    </div>
+                    <div className="h-2 bg-slate-700 rounded">
+                        <div
+                            style={{ width: `${pct}%` }}
+                            className={`h-2 rounded transition-all duration-500 ${ok ? "bg-green-500" : "bg-red-500"}`}
+                        />
+                    </div>
+                </div>
+            );
+        }
+
+        function Pill({ active, children, onClick }) {
+            return (
+                <button
+                    onClick={onClick}
+                    className={`px-3 py-1 rounded-full text-sm mr-2 mb-2 border transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 ${
+                        active ? "bg-emerald-500/20 text-emerald-300 border-emerald-400 focus:ring-emerald-500" : "border-slate-600 text-slate-300 hover:bg-slate-700/40 focus:ring-slate-400"
+                    }`}
+                >
+                    {children}
+                </button>
+            );
+        }
+
+        function Section({ title, children, right, isMinimized }) {
+            return (
+                <div className="bg-slate-800/70 rounded-2xl p-5 shadow-lg shadow-black/20 border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-slate-100 text-lg font-semibold tracking-tight">{title}</h2>
+                        {right}
+                    </div>
+                    {!isMinimized && children}
+                </div>
+            );
+        }
+
+        const DEFAULT_PROFILE = {
+            sex: "M",
+            age: 33,
+            weight: 73, // kg
+            height: 170, // cm
+            activity: "moderate",
+            goal: "recomp", // loss | maintain | gain | recomp
+            neck: 36, // cm (Novo)
+            waist: 85, // cm (Novo)
+            hip: 95, // cm (Novo - relevante para mulheres, mas mantido para fórmula geral)
+            photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto'
+        };
+
+        const INITIAL_SLOT_KEYS = [`slot-1`, `slot-2`, `slot-3`, `slot-4`];
+        const getInitialDayState = (keys) => keys.reduce((acc, key) => ({ ...acc, [key]: [] }), {});
+
+        function App() {
+            // ----------------------------------------------------
+            // ESTADO DE DADOS (COM PERSISTÊNCIA)
+            // ----------------------------------------------------
+
+            const [profile, setProfile] = useState(() => loadState(PROFILE_STORAGE_KEY, DEFAULT_PROFILE));
+            const [isProfileLocked, setIsProfileLocked] = useState(false); 
+
+            const [slotKeys, setSlotKeys] = useState(() => {
+                // Tenta carregar as chaves. Se falhar, usa as iniciais.
+                const loadedKeys = loadState(SLOTS_STORAGE_KEY, INITIAL_SLOT_KEYS);
+                return Array.isArray(loadedKeys) && loadedKeys.length > 0 ? loadedKeys : INITIAL_SLOT_KEYS;
+            });
+
+            // ESTADO MULTI-DIA
+            const [currentDayId, setCurrentDayId] = useState(() => loadState(CURRENT_DAY_ID_STORAGE_KEY, INITIAL_DAY_ID));
+            
+            const [allDays, setAllDays] = useState(() => {
+                const loadedDays = loadState(ALL_DAYS_STORAGE_KEY, {});
+                // Se não houver dados, ou o dia inicial estiver faltando, cria o dia inicial
+                if (Object.keys(loadedDays).length === 0 || !loadedDays[INITIAL_DAY_ID]) {
+                    return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
+                }
+                return loadedDays;
+            });
+
+            // O dia ativo sendo visualizado/editado
+            const day = allDays[currentDayId] || getInitialDayState(slotKeys);
+
+
+            // ----------------------------------------------------
+            // EFEITOS DE PERSISTÊNCIA (SALVAR ESTADO)
+            // ----------------------------------------------------
+            useEffect(() => {
+                saveState(PROFILE_STORAGE_KEY, profile);
+            }, [profile]);
+            
+            useEffect(() => {
+                // Salva todos os dias
+                saveState(ALL_DAYS_STORAGE_KEY, allDays);
+            }, [allDays]); 
+
+            useEffect(() => {
+                // Salva o ID do dia atual
+                saveState(CURRENT_DAY_ID_STORAGE_KEY, currentDayId);
+            }, [currentDayId]);
+
+            useEffect(() => {
+                // Salva as chaves de slot (mantidas globais para consistência)
+                saveState(SLOTS_STORAGE_KEY, slotKeys);
+            }, [slotKeys]);
+
+
+            // ----------------------------------------------------
+            // ESTADOS DE UI (Minimizar/Filtros)
+            // ----------------------------------------------------
+            const [isProfileMinimized, setIsProfileMinimized] = useState(false);
+            const [isMacrosMinimized, setIsMacrosMinimized] = useState(false); 
+            const [isLibraryMinimized, setIsLibraryMinimized] = useState(false); 
+            const [isDayMinimized, setIsDayMinimized] = useState(false); 
+            
+            const [selectedBlock, setSelectedBlock] = useState("all");
+            const [activeTags, setActiveTags] = useState([]);
+            const [search, setSearch] = useState("");
+
+
+            const handleProfileChange = (key, value) => {
+                if (isProfileLocked) return;
+
+                // Sanitiza e valida o input antes de atualizar o estado
+                let finalValue;
+                if (['sex', 'activity', 'goal', 'photoUrl'].includes(key)) {
+                    finalValue = value;
+                } else {
+                    finalValue = normalizeAndValidateInput(key, value);
+                }
+                
+                setProfile(p => ({ ...p, [key]: finalValue }));
+            };
+            
+            const handlePhotoUpload = (e) => {
+                if (isProfileLocked) return;
+                const file = e.target.files[0];
+                if (file) {
+                    // Simulação de upload (URL local temporária)
+                    const url = URL.createObjectURL(file);
+                    setProfile(p => ({ ...p, photoUrl: url }));
+                }
+            };
+
+
+            // Cálculos do Perfil (Memoizados)
+            const bmr = useMemo(() => calcBMR(profile), [profile]);
+            const tdee = useMemo(() => calcTDEE(bmr, profile.activity), [bmr, profile.activity]);
+            const targetCalories = useMemo(() => {
+                return round(adjustForGoal(tdee, profile.goal));
+            }, [tdee, profile.goal]);
+
+            const macroTargets = useMemo(
+                () => deriveMacroTargets({ weight: profile.weight, calories: targetCalories }),
+                [profile.weight, targetCalories]
+            );
+            
+            // bodyFat depende apenas das medidas (peso não entra na fórmula US Navy)
+            const bodyFat = useMemo(() => {
+                const v = calcBF(profile);
+                return v != null ? round(v, 1) : null;
+            }, [profile.sex, profile.height, profile.neck, profile.waist, profile.hip]);
+            
+            // Filtro de refeições (Memoizado)
+            const filteredMeals = useMemo(() => {
+                return MEALS_WITH_TOTALS.filter((m) => {
+                    const blockOk = selectedBlock === "all" || m.block === selectedBlock;
+                    const tagOk = activeTags.length === 0 || activeTags.every((t) => m.tags.includes(t));
+                    const searchOk = m.name.toLowerCase().includes(search.toLowerCase());
+                    return blockOk && tagOk && searchOk;
+                });
+            }, [selectedBlock, activeTags, search]);
+
+            // Totais do dia ativo (Memoizado)
+            const totals = useMemo(() => {
+                const allSlotsContent = Object.values(day).flat();
+                
+                return allSlotsContent.reduce(
+                    (acc, mealEntry) => {
+                        const mealTotals = mealEntry.ingredients.reduce((mealAcc, ingredientEntry) => {
+                            const macros = calculateMealMacros(ingredientEntry);
+                            mealAcc.kcal += macros.kcal;
+                            mealAcc.protein += macros.protein;
+                            mealAcc.carbs += macros.carbs;
+                            mealAcc.fats += macros.fats;
+                            return mealAcc;
+                        }, { kcal: 0, protein: 0, carbs: 0, fats: 0 });
+
+                        acc.kcal += mealTotals.kcal;
+                        acc.protein += mealTotals.protein;
+                        acc.carbs += mealTotals.carbs;
+                        acc.fats += mealTotals.fats;
+
+                        return acc;
+                    },
+                    { kcal: 0, protein: 0, carbs: 0, fats: 0 }
+                );
+            }, [day]);
+
+            function getSlotLabel(key) {
+                const index = slotKeys.indexOf(key);
+                if (index === -1) return key; 
+                return `Refeição ${index + 1}`;
+            }
+
+            // Função auxiliar para atualizar o dia atual no mapa allDays
+            const updateDay = (newDayState) => {
+                setAllDays(prev => ({
+                    ...prev,
+                    [currentDayId]: newDayState
+                }));
+            };
+
+            // Adiciona a refeição desmembrada
+            function addTo(slotKey, meal) {
+                const newEntry = {
+                    mealId: meal.id,
+                    name: meal.name,
+                    isLocked: false, // Inicia destrancada
+                    ingredients: meal.ingredients.map(ing => ({ ...ing, portion: 1 }))
+                };
+                const newDayState = { ...day, [slotKey]: [...(day[slotKey] || []), newEntry] };
+                updateDay(newDayState);
+            }
+
+            // Função para TRANCAR / DESTRANCAR a refeição
+            const toggleLock = (slotKey, mealIndex) => {
+                const newDayState = {
+                    ...day,
+                    [slotKey]: day[slotKey].map((mealEntry, mIdx) => {
+                        if (mIdx !== mealIndex) return mealEntry;
+                        return { ...mealEntry, isLocked: !mealEntry.isLocked };
+                    })
+                };
+                updateDay(newDayState);
+            };
+
+            // Remove o ingrediente (sub-item)
+            function removeIngredient(slotKey, mealIndex, ingredientIndex) {
+                const newDayState = {
+                    ...day,
+                    [slotKey]: day[slotKey].map((mealEntry, mIdx) => {
+                        // Não permite remoção se trancada
+                        if (mIdx !== mealIndex || mealEntry.isLocked) return mealEntry; 
+                        
+                        const newIngredients = mealEntry.ingredients.filter((_, iIdx) => iIdx !== ingredientIndex);
+                        
+                        // Se o último ingrediente for removido, remove a refeição inteira
+                        if (newIngredients.length === 0) {
+                            return null; 
+                        }
+
+                        return { ...mealEntry, ingredients: newIngredients };
+                    }).filter(Boolean) // Remove refeições que se tornaram nulas (vazias)
+                };
+                updateDay(newDayState);
+            }
+
+            // Atualiza a porção do ingrediente (sub-item)
+            function updateIngredientPortion(slotKey, mealIndex, ingredientIndex, newPortion) {
+                const newDayState = {
+                    ...day,
+                    [slotKey]: day[slotKey].map((mealEntry, mIdx) => {
+                        if (mIdx !== mealIndex || mealEntry.isLocked) return mealEntry; // Não atualiza se trancada
+                        
+                        return {
+                            ...mealEntry,
+                            ingredients: mealEntry.ingredients.map((ingEntry, iIdx) => 
+                                iIdx === ingredientIndex ? { ...ingEntry, portion: newPortion } : ingEntry
+                            )
+                        };
+                    })
+                };
+                updateDay(newDayState);
+            }
+
+            // Remove a refeição inteira (item principal)
+            function removeMeal(slotKey, mealIndex) {
+                const newDayState = { ...day, [slotKey]: day[slotKey].filter((_, i) => i !== mealIndex) };
+                updateDay(newDayState);
+            }
+
+            // Adiciona um novo slot com chave incremental estável
+            function addSlot() {
+                if (slotKeys.length >= 8) return; 
+                
+                // Encontra o próximo ID disponível (Ex: slot-1, slot-2, slot-3...)
+                const newIndex = slotKeys.length + 1;
+                const newKey = `slot-${newIndex}`; 
+                
+                setSlotKeys(prev => [...prev, newKey]);
+
+                // Adiciona o novo slot (vazio) a TODOS os dias existentes
+                setAllDays(prevDays => {
+                    const updatedDays = { ...prevDays };
+                    Object.keys(updatedDays).forEach(dayId => {
+                        updatedDays[dayId] = {
+                            ...updatedDays[dayId],
+                            [newKey]: []
+                        };
+                    });
+                    return updatedDays;
+                });
+            }
+
+            function removeSlot(keyToRemove) {
+                if (slotKeys.length <= 1) return; 
+                
+                // Remove a chave
+                setSlotKeys(prev => prev.filter(key => key !== keyToRemove));
+
+                // Remove o slot de TODOS os dias existentes
+                setAllDays(prevDays => {
+                    const updatedDays = { ...prevDays };
+                    Object.keys(updatedDays).forEach(dayId => {
+                        const { [keyToRemove]: _, ...rest } = updatedDays[dayId];
+                        updatedDays[dayId] = rest;
+                    });
+                    return updatedDays;
+                });
+            }
+
+            function resetDay() {
+                // Usa as chaves atuais para resetar o conteúdo do dia ativo
+                const newDayState = getInitialDayState(slotKeys);
+                updateDay(newDayState);
+            }
+
+            // DUPLICAR PLANO
+            function duplicateCurrentDay() {
+                const dayIds = Object.keys(allDays);
+                const lastIndex = dayIds.reduce((max, id) => {
+                    const match = id.match(/day-(\d+)/);
+                    return match ? Math.max(max, parseInt(match[1], 10)) : max;
+                }, 0);
+
+                const newDayId = `day-${lastIndex + 1}`;
+                
+                setAllDays(prev => ({
+                    ...prev,
+                    [newDayId]: JSON.parse(JSON.stringify(day)) // Deep copy do dia atual
+                }));
+
+                setCurrentDayId(newDayId);
+            }
+
+            const dayOptions = Object.keys(allDays).sort((a, b) => {
+                const numA = parseInt(a.split('-')[1], 10) || 0;
+                const numB = parseInt(b.split('-')[1], 10) || 0;
+                return numA - numB;
+            });
+
+            const getDayLabel = (dayId) => {
+                const index = dayOptions.indexOf(dayId);
+                return `Dia ${index + 1}`;
+            };
+
+            // Componente de Upload de Foto
+            const ProfilePhotoUploader = ({ photoUrl, handleUpload, isDisabled }) => (
+                <div className={`flex flex-col items-center mb-4 ${isDisabled ? 'opacity-50' : ''}`}>
+                    <label htmlFor="profile-photo-upload" className={isDisabled ? '' : 'cursor-pointer'}>
+                        <img
+                            src={photoUrl}
+                            alt="Foto de Perfil"
+                            className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 transition duration-150 ${isDisabled ? 'grayscale' : 'hover:border-emerald-500'}`}
+                            // Garante que a foto volte ao padrão se der erro de carregamento.
+                            onError={(e) => e.target.src = DEFAULT_PROFILE.photoUrl} 
+                        />
+                        <input
+                            id="profile-photo-upload"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleUpload}
+                            className="hidden"
+                            disabled={isDisabled}
+                        />
+                    </label>
+                    <p className="text-xs text-slate-400 mt-2">{isDisabled ? 'Informações fixadas' : 'Clique para alterar foto'}</p>
+                </div>
+            );
+
+
+            return (
+                <div className="min-h-screen bg-[#0a0a1a] text-slate-200 font-inter">
+                    <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#0a0a1a]/90 backdrop-blur z-20">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight text-white">Cardápio Inteligente</h1>
+                                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.6)</p>
+                            </div>
+                            <div className="hidden md:flex items-center gap-3">
+                                <a href="#biblioteca" className="text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40 transition">Biblioteca</a>
+                                <a href="#meu-dia" className="text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40 transition">Meu Dia</a>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* ESTRUTURA FINAL: 1/3 esquerda para Perfil/Metas | 2/3 direita para Biblioteca/MeuDia */}
+                    <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        {/* COLUNA 1 (1/3): Perfil e Metas - Ocupa 1/3 do espaço em telas grandes */}
+                        <div className="lg:col-span-1 flex flex-col gap-6"> 
+                            
+                            {/* 1. SEU PERFIL - CUSTOMIZADO PARA MANTER FOTO VISÍVEL QUANDO MINIMIZADO */}
+                            <div className="bg-slate-800/70 rounded-2xl p-5 shadow-lg shadow-black/20 border border-slate-700/50">
+                                {/* Título e Botões de Ação */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-slate-100 text-lg font-semibold tracking-tight">Seu Perfil</h2>
+                                    <div className="flex gap-2 items-center">
+                                        {/* Botão de LOCK/UNLOCK do Perfil */}
+                                        <button
+                                            onClick={() => setIsProfileLocked(p => !p)}
+                                            className={`text-xs px-2 py-0.5 rounded transition font-semibold border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 ${
+                                                    isProfileLocked 
+                                                    ? 'border-red-500 text-red-300 bg-red-900/20 hover:bg-red-500/20 focus:ring-red-500' 
+                                                    : 'border-emerald-500 text-emerald-300 bg-emerald-900/20 hover:bg-emerald-500/20 focus:ring-emerald-500'
+                                            }`}
+                                            title={isProfileLocked ? "Destrancar para editar" : "Trancar e fixar informações"}
+                                            aria-label={isProfileLocked ? "Editar Perfil (destrancar)" : "Trancar Perfil (fixar informações)"}
+                                        >
+                                            {isProfileLocked ? 'Editar' : 'Trancar Perfil'}
+                                        </button>
+
+                                        {/* Botão de Minimizar/Maximizar */}
+                                        <MinimizeButton isMinimized={isProfileMinimized} toggleMinimize={() => setIsProfileMinimized(p => !p)} />
+                                    </div>
+                                </div>
+                                
+                                {/* CONTEÚDO DA SEÇÃO */}
+                                <div className="mt-4">
+                                    {/* FOTO (AGORA SEMPRE VISÍVEL) */}
+                                    <ProfilePhotoUploader photoUrl={profile.photoUrl} handleUpload={handlePhotoUpload} isDisabled={isProfileLocked} />
+
+                                    {/* FORMULÁRIOS E RESULTADOS (OCULTOS SE MINIMIZADO) */}
+                                    {!isProfileMinimized && (
+                                        <div className={`${isProfileLocked ? 'opacity-70 cursor-not-allowed' : ''}`} title={isProfileLocked ? "Perfil trancado" : undefined}>
+
+                                            {/* Bloco 1: Dados Pessoais */}
+                                            <div className="grid grid-cols-2 gap-3 text-sm border-b border-slate-700 pb-4 mb-4">
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Sexo</span>
+                                                    <select
+                                                        value={profile.sex}
+                                                        onChange={(e) => handleProfileChange('sex', e.target.value)}
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`}
+                                                        disabled={isProfileLocked}
+                                                        title={isProfileLocked ? "Perfil trancado" : "Selecione seu sexo"}
+                                                    >
+                                                        <option value="M">Masculino</option>
+                                                        <option value="F">Feminino</option>
+                                                    </select>
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Idade</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={INPUT_RANGES.age.min} 
+                                                        max={INPUT_RANGES.age.max} 
+                                                        step={INPUT_RANGES.age.step}
+                                                        placeholder={`Ex.: ${DEFAULT_PROFILE.age}`}
+                                                        value={profile.age} 
+                                                        onChange={(e) => handleProfileChange('age', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                        disabled={isProfileLocked} 
+                                                        title={isProfileLocked ? "Perfil trancado" : `Insira idade entre ${INPUT_RANGES.age.min} e ${INPUT_RANGES.age.max} anos`}
+                                                    />
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Peso (kg)</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={INPUT_RANGES.weight.min} 
+                                                        max={INPUT_RANGES.weight.max} 
+                                                        step={INPUT_RANGES.weight.step}
+                                                        placeholder={`Ex.: ${DEFAULT_PROFILE.weight} kg`}
+                                                        value={profile.weight} 
+                                                        onChange={(e) => handleProfileChange('weight', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                        disabled={isProfileLocked} 
+                                                        title={isProfileLocked ? "Perfil trancado" : `Insira peso entre ${INPUT_RANGES.weight.min} e ${INPUT_RANGES.weight.max} kg`}
+                                                    />
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Altura (cm)</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={INPUT_RANGES.height.min} 
+                                                        max={INPUT_RANGES.height.max} 
+                                                        step={INPUT_RANGES.height.step}
+                                                        placeholder={`Ex.: ${DEFAULT_PROFILE.height} cm`}
+                                                        value={profile.height} 
+                                                        onChange={(e) => handleProfileChange('height', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                        disabled={isProfileLocked} 
+                                                        title={isProfileLocked ? "Perfil trancado" : `Insira altura entre ${INPUT_RANGES.height.min} e ${INPUT_RANGES.height.max} cm`}
+                                                    />
+                                                </label>
+                                            </div>
+                                            
+                                            {/* Bloco 2: Medidas de Circunferência */}
+                                            <span className="text-slate-300 font-semibold text-sm block mb-3">Medidas (Cálculo % Gordura)</span>
+                                            <div className="grid grid-cols-2 gap-3 text-sm border-b border-slate-700 pb-4 mb-4">
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Pescoço (cm)</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={INPUT_RANGES.neck.min} 
+                                                        max={INPUT_RANGES.neck.max} 
+                                                        step={INPUT_RANGES.neck.step}
+                                                        placeholder={`Ex.: ${DEFAULT_PROFILE.neck} cm`}
+                                                        value={profile.neck} 
+                                                        onChange={(e) => handleProfileChange('neck', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                        disabled={isProfileLocked} 
+                                                        title={isProfileLocked ? "Perfil trancado" : `Insira circunferência do pescoço em cm`}
+                                                    />
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Cintura (cm)</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={INPUT_RANGES.waist.min} 
+                                                        max={INPUT_RANGES.waist.max} 
+                                                        step={INPUT_RANGES.waist.step}
+                                                        placeholder={`Ex.: ${DEFAULT_PROFILE.waist} cm`}
+                                                        value={profile.waist} 
+                                                        onChange={(e) => handleProfileChange('waist', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                        disabled={isProfileLocked} 
+                                                        title={isProfileLocked ? "Perfil trancado" : `Insira circunferência da cintura em cm`}
+                                                    />
+                                                </label>
+                                                {profile.sex === 'F' && (
+                                                    <label className="flex flex-col gap-1 col-span-2">
+                                                        <span className="text-slate-300">Quadril (cm)</span>
+                                                        <input 
+                                                            type="number" 
+                                                            min={INPUT_RANGES.hip.min} 
+                                                            max={INPUT_RANGES.hip.max} 
+                                                            step={INPUT_RANGES.hip.step}
+                                                            placeholder={`Ex.: ${DEFAULT_PROFILE.hip} cm`}
+                                                            value={profile.hip} 
+                                                            onChange={(e) => handleProfileChange('hip', e.target.value)} 
+                                                            className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`} 
+                                                            disabled={isProfileLocked} 
+                                                            title={isProfileLocked ? "Perfil trancado" : `Insira circunferência do quadril em cm`}
+                                                        />
+                                                    </label>
+                                                )}
+                                                <p className="text-slate-500 text-xs mt-1 col-span-2">
+                                                    {bodyFat === null && profile.sex === 'F' && '⚠️ Altura, Pescoço, Cintura E Quadril são necessários para o %BF Feminino.'}
+                                                    {bodyFat === null && profile.sex === 'M' && '⚠️ Altura, Pescoço E Cintura são necessários para o %BF Masculino.'}
+                                                </p>
+                                            </div>
+                                            
+                                            {/* Bloco 3: Atividade e Objetivo */}
+                                            <div className="grid grid-cols-1 gap-3 text-sm">
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Nível de Atividade</span>
+                                                    <select 
+                                                        value={profile.activity} 
+                                                        onChange={(e) => handleProfileChange('activity', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`}
+                                                        disabled={isProfileLocked}
+                                                        title={isProfileLocked ? "Perfil trancado" : "Selecione seu nível de atividade física"}
+                                                    >
+                                                        <option value="sedentary">Sedentário</option>
+                                                        <option value="light">Leve (1–3x/sem)</option>
+                                                        <option value="moderate">Moderado (3–5x/sem)</option>
+                                                        <option value="active">Ativo (6–7x/sem)</option>
+                                                        <option value="very">Muito ativo</option>
+                                                    </select>
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-slate-300">Objetivo</span>
+                                                    <select 
+                                                        value={profile.goal} 
+                                                        onChange={(e) => handleProfileChange('goal', e.target.value)} 
+                                                        className={`bg-slate-900 border border-slate-600 rounded px-2 py-2 focus:ring-emerald-500 focus:border-emerald-500 ${isProfileLocked ? 'cursor-not-allowed' : ''}`}
+                                                        disabled={isProfileLocked}
+                                                        title={isProfileLocked ? "Perfil trancado" : "Selecione seu objetivo calórico"}
+                                                    >
+                                                        <option value="loss">Emagrecer (déficit)</option>
+                                                        <option value="maintain">Manter</option>
+                                                        <option value="gain">Ganhar (superávit)</option>
+                                                        <option value="recomp">Recomposição (leve déficit, 5%)</option>
+                                                    </select>
+                                                </label>
+                                            </div>
+
+                                            {/* Bloco 4: Resultados */}
+                                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                                <div className="p-3 rounded bg-slate-900 border border-slate-700">
+                                                    <div className="text-slate-400">TDEE alvo</div>
+                                                    <div className="text-xl font-semibold text-emerald-400">{round(targetCalories)}</div>
+                                                    <div className="text-slate-500 text-xs">kcal/dia</div>
+                                                </div>
+                                                <div className="p-3 rounded bg-slate-900 border border-slate-700">
+                                                    <div className="text-slate-400">% Gordura Est. (BF)</div>
+                                                    <div className={`text-xl font-semibold ${bodyFat !== null ? 'text-white' : 'text-yellow-500'}`}>
+                                                        {bodyFat !== null ? `${bodyFat}%` : 'Dados Incompletos'}
+                                                    </div>
+                                                    <div className="text-slate-500 text-xs">Fórmula Marinha EUA</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+
+                            {/* 2. METAS DE MACROS (Com botão de minimizar) */}
+                            <Section 
+                                title="Metas de Macros"
+                                isMinimized={isMacrosMinimized}
+                                right={<MinimizeButton isMinimized={isMacrosMinimized} toggleMinimize={() => setIsMacrosMinimized(p => !p)} />}
+                            >
+                                <Stat label="Calorias" value={totals.kcal} unit=" kcal" target={targetCalories} />
+                                <Stat label="Proteínas" value={totals.protein} unit=" g" target={macroTargets.protein} />
+                                <Stat label="Carboidratos" value={totals.carbs} unit=" g" target={macroTargets.carbs} />
+                                <Stat label="Gorduras" value={totals.fats} unit=" g" target={macroTargets.fats} />
+                                <div className="text-xs text-slate-400 mt-2">
+                                    * Metas calculadas por g/kg (P: $1.8 \vert$ G: $0.8$). Ajuste seu perfil para recalcular.
+                                </div>
+                            </Section>
+                        </div>
+
+                        {/* COLUNA 2 (2/3): Biblioteca e Meu Dia lado a lado em telas grandes */}
+                        <div className="lg:col-span-2 grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            
+                            {/* 3. BIBLIOTECA DE REFEIÇÕES (Com botão de minimizar) */}
+                            <Section
+                                title="Biblioteca de Refeições"
+                                isMinimized={isLibraryMinimized}
+                                right={
+                                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                                        <input
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            placeholder="Buscar refeição..."
+                                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-full md:w-48 focus:ring-emerald-500 focus:border-emerald-500"
+                                            title="Busca por nome da refeição"
+                                        />
+                                        <select
+                                            value={selectedBlock}
+                                            onChange={(e) => setSelectedBlock(e.target.value)}
+                                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                                            title="Filtro por bloco calórico"
+                                        >
+                                            <option value="all">Todos os blocos</option>
+                                            <option value="250">250 kcal (Snack/Pré-Cama)</option>
+                                            <option value="350">350 kcal (Lanche/Café)</option>
+                                            <option value="500">500 kcal (Padrão)</option>
+                                            <option value="750">750 kcal (Alta Energia)</option>
+                                        </select>
+                                        <MinimizeButton isMinimized={isLibraryMinimized} toggleMinimize={() => setIsLibraryMinimized(p => !p)} />
+                                    </div>
+                                }
+                            >
+                                <div className="flex flex-wrap mb-3">
+                                    {TAGS.map((t) => (
+                                        <Pill key={t} active={activeTags.includes(t)} onClick={() => setActiveTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}>
+                                            {t}
+                                        </Pill>
+                                    ))}
+                                    {activeTags.length > 0 && (
+                                        <button onClick={() => setActiveTags([])} className="text-xs text-slate-400 underline ml-2 hover:text-white transition focus:outline-none focus:ring-1 focus:ring-slate-400 rounded" title="Limpar todos os filtros de tags">
+                                            limpar tags
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div id="biblioteca" className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                                    {filteredMeals.map((m) => (
+                                        <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 transition-shadow hover:shadow-emerald-500/10 hover:shadow-xl">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <div className="font-semibold text-slate-100">{m.name}</div>
+                                                    <div className="text-sm text-slate-400">
+                                                        {round(m.kcal)} kcal • P {round(m.protein)}g • C {round(m.carbs)}g • G {round(m.fats)}g
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">{m.block} kcal</span>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                {m.tags.map((t) => (
+                                                    <span key={t} className="text-xs px-2 py-1 rounded-full bg-slate-800 border border-slate-600 text-slate-300">
+                                                        {t}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-2">
+                                                {slotKeys.map((slotKey) => (
+                                                    <button
+                                                        key={slotKey}
+                                                        onClick={() => addTo(slotKey, m)}
+                                                        className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10 transition focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                        title={`Adicionar ${m.name} em ${getDayLabel(currentDayId)} - ${getSlotLabel(slotKey)}`}
+                                                        aria-label={`Adicionar ${m.name} em ${getSlotLabel(slotKey)}`}
+                                                    >
+                                                        + {getSlotLabel(slotKey)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {filteredMeals.length === 0 && (() => {
+                                        const filtersApplied = [
+                                            selectedBlock !== "all" ? `bloco ${selectedBlock} kcal` : null,
+                                            activeTags.length > 0 ? `tags: ${activeTags.join(', ')}` : null,
+                                            search ? `busca por: '${search}'` : null,
+                                        ].filter(Boolean).join(' e ');
+
+                                        const noResultsMessage = filtersApplied 
+                                            ? `Nenhuma refeição encontrada com ${filtersApplied}. Tente limpar filtros.`
+                                            : `Nenhuma refeição na biblioteca.`;
+
+                                        return <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">{noResultsMessage}</div>;
+                                    })()}
+                                </div>
+                            </Section>
+
+                            {/* 4. MEU DIA (Com botão de minimizar) */}
+                            <Section
+                                title="Meu Dia"
+                                isMinimized={isDayMinimized}
+                                right={
+                                    <div className="flex gap-2 flex-wrap justify-end">
+                                        {/* Seletor de Dia */}
+                                        <select
+                                            value={currentDayId}
+                                            onChange={(e) => setCurrentDayId(e.target.value)}
+                                            className="bg-slate-900 border border-blue-600 rounded px-3 py-1 text-sm text-blue-300 focus:ring-blue-500 focus:border-blue-500 font-semibold"
+                                            title="Selecione o plano diário"
+                                            aria-label="Seletor de Dia"
+                                        >
+                                            {dayOptions.map((dayId, index) => (
+                                                <option key={dayId} value={dayId}>
+                                                    {getDayLabel(dayId)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        
+                                        {/* Duplicar Plano */}
+                                        <button
+                                            onClick={duplicateCurrentDay}
+                                            className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40 hover:border-purple-400 transition focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                            title="Duplicar o planejamento do dia atual para um novo dia"
+                                            aria-label="Duplicar Plano Diário"
+                                        >
+                                            Duplicar Plano
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={resetDay} 
+                                            className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40 hover:border-red-500 transition focus:outline-none focus:ring-1 focus:ring-red-500"
+                                            title="Remover todos os itens e limpar o dia"
+                                            aria-label="Resetar Conteúdo do Dia"
+                                        >
+                                            Resetar Conteúdo
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={addSlot} 
+                                            disabled={slotKeys.length >= 8}
+                                            className={`text-sm px-3 py-1 rounded border transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 ${
+                                                slotKeys.length >= 8 
+                                                ? 'border-slate-700 text-slate-600 cursor-not-allowed'
+                                                : 'border-blue-500 text-blue-300 hover:bg-blue-500/10 focus:ring-blue-500'
+                                            }`}
+                                            title={slotKeys.length >= 8 ? "Limite de 8 Refeições atingido" : "Adicionar mais Refeições (Máx: 8)"}
+                                            aria-label={slotKeys.length >= 8 ? "Limite de slots atingido" : "Adicionar novo slot de refeição"}
+                                        >
+                                            + Refeição
+                                        </button>
+                                        <MinimizeButton isMinimized={isDayMinimized} toggleMinimize={() => setIsDayMinimized(p => !p)} />
+                                    </div>
+                                }
+                            >
+                                <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                                    {slotKeys.map((slotKey, slotIndex) => (
+                                        <div key={slotKey} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="font-semibold text-slate-100">{getSlotLabel(slotKey)}</div>
+                                                {slotKeys.length > 1 && (
+                                                    <button 
+                                                        onClick={() => removeSlot(slotKey)}
+                                                        className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20 transition focus:outline-none focus:ring-1 focus:ring-red-500"
+                                                        title={`Remover slot: ${getSlotLabel(slotKey)}`}
+                                                        aria-label={`Remover slot ${getSlotLabel(slotKey)}`}
+                                                    >
+                                                        Remover Slot
+                                                    </button>
+                                                )}
+                                            </div>
+                                            
+                                            {(!day[slotKey] || day[slotKey].length === 0) ? (
+                                                <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">Vazio — adicione refeições da biblioteca.</div>
+                                            ) : (
+                                                <ul className="space-y-3">
+                                                    {day[slotKey].map((mealEntry, mealIndex) => (
+                                                        <li key={mealIndex} className={`p-3 border rounded-xl shadow-inner ${mealEntry.isLocked ? 'border-emerald-500/50 bg-emerald-900/10' : 'border-slate-700 bg-slate-900/50'}`}>
+                                                            
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
+                                                                    {mealEntry.name}
+                                                                    {mealEntry.isLocked && (
+                                                                        <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" title="Refeição Feita/Trancada">
+                                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                                                                        </svg>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex gap-2 items-center flex-shrink-0">
+                                                                    {/* Botão de TRANCAR/DESTRANCAR */}
+                                                                    <button
+                                                                        onClick={() => toggleLock(slotKey, mealIndex)}
+                                                                        className={`text-xs px-2 py-0.5 rounded transition font-semibold focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-offset-slate-800 ${
+                                                                            mealEntry.isLocked 
+                                                                            ? 'border border-red-500 text-red-300 bg-red-900/20 hover:bg-red-500/20 focus:ring-red-500' 
+                                                                            : 'border border-emerald-500 text-emerald-300 bg-emerald-900/20 hover:bg-emerald-500/20 focus:ring-emerald-500'
+                                                                        }`}
+                                                                        title={mealEntry.isLocked ? "Destrancar para editar" : "Trancar e marcar como feita"}
+                                                                        aria-label={mealEntry.isLocked ? "Editar Refeição (destrancar)" : "Marcar como Feita (trancar)"}
+                                                                    >
+                                                                        {mealEntry.isLocked ? 'Editar' : 'Feita'}
+                                                                    </button>
+
+                                                                    <button
+                                                                        onClick={() => removeMeal(slotKey, mealIndex)}
+                                                                        className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10 transition focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                                                        title="Remover refeição inteira"
+                                                                        aria-label={`Remover refeição ${mealEntry.name}`}
+                                                                    >
+                                                                        Remover
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Detalhes do Ingrediente (Desmembrado) */}
+                                                            <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
+                                                            <ul className="space-y-2">
+                                                                {mealEntry.ingredients.map((ingredientEntry, ingredientIndex) => {
+                                                                    const macros = calculateMealMacros(ingredientEntry);
+                                                                    const isDisabled = mealEntry.isLocked;
+                                                                    return (
+                                                                        <li key={ingredientIndex} className={`flex justify-between items-center text-xs pl-3 py-1 border-l-2 ${isDisabled ? 'border-emerald-500/50' : 'border-slate-700 hover:bg-slate-800/50'} rounded-sm`}>
+                                                                            <div className="text-slate-300 flex-1 truncate">
+                                                                                {ingredientEntry.name} (<strong className="text-slate-200">{round(macros.kcal)} kcal</strong>)
+                                                                            </div>
+                                                                            
+                                                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                                                <select
+                                                                                    value={ingredientEntry.portion}
+                                                                                    onChange={(e) => updateIngredientPortion(slotKey, mealIndex, ingredientIndex, Number(e.target.value))}
+                                                                                    className={`bg-slate-700 border rounded px-1 py-0.5 text-xs text-white w-20 transition focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDisabled ? 'opacity-50 cursor-not-allowed border-slate-700' : 'border-slate-600'}`}
+                                                                                    disabled={isDisabled}
+                                                                                    title={isDisabled ? "Destranque para alterar a porção" : "Ajustar porção"}
+                                                                                    aria-label={`Ajustar porção de ${ingredientEntry.name}`}
+                                                                                >
+                                                                                    {PORTION_OPTIONS.map(p => (
+                                                                                        <option key={p} value={p}>
+                                                                                            {p}x
+                                                                                        </option>
+                                                                                    ))}
+                                                                                </select>
+                                                                                <button
+                                                                                    onClick={() => removeIngredient(slotKey, mealIndex, ingredientIndex)}
+                                                                                    className={`text-xs p-1 rounded transition focus:outline-none focus:ring-1 focus:ring-red-400 ${isDisabled ? 'text-slate-600 cursor-not-allowed' : 'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`}
+                                                                                    title={isDisabled ? "Destranque para remover" : `Remover ${ingredientEntry.name}`}
+                                                                                    disabled={isDisabled}
+                                                                                    aria-label={`Remover ingrediente ${ingredientEntry.name}`}
+                                                                                >
+                                                                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
+                                                                                    </svg>
+                                                                                </button>
+                                                                            </div>
+                                                                        </li>
+                                                                    );
+                                                                })}
+                                                            </ul>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {/* Totais do Dia */}
+                                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
+                                    <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center shadow-md shadow-emerald-900/20">
+                                        <div className="text-slate-400 text-xs">Calorias</div>
+                                        <div className="text-xl font-bold text-white">{round(totals.kcal)}</div>
+                                    </div>
+                                    <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                                        <div className="text-slate-400 text-xs">Proteínas</div>
+                                        <div className="text-xl font-bold text-white">{round(totals.protein)} g</div>
+                                    </div>
+                                    <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                                        <div className="text-slate-400 text-xs">Carboidratos</div>
+                                        <div className="text-xl font-bold text-white">{round(totals.carbs)} g</div>
+                                    </div>
+                                    <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                                        <div className="text-slate-400 text-xs">Gorduras</div>
+                                        <div className="text-xl font-bold text-white">{round(totals.fats)} g</div>
+                                    </div>
+                                </div>
+                            </Section>
+                        </div>
+                    </main>
+
+                    <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
+                        MVP visual v5.6. Implementação de planejamento multi-dia e duplicação de planos.
+                    </footer>
+                </div>
+            );
+        }
+
+        // Inicializa o React
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
