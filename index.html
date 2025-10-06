@@ -33,6 +33,31 @@
     window.addEventListener('unhandledrejection', e => show('[promise] ' + (e.reason && (e.reason.stack||e.reason.message||e.reason) )));
   })();
 </script>
+  <script>
+  // Loader de dados com cache-bust e validação leve
+  (async function(){
+    const APP_VERSION = "2.0.0"; // mude quando editar o JSON
+    function validateMenu(data){
+      if (!data || typeof data!=='object') throw new Error('JSON inválido (objeto ausente)');
+      if (!Array.isArray(data.itens)) throw new Error('Campo "itens" deve ser array');
+      for (const it of data.itens) {
+        if (!it.id || !it.nome) throw new Error('Item sem id/nome');
+        if (typeof it.kcal !== 'number') throw new Error('Item sem "kcal" numérico');
+      }
+      return data;
+    }
+    try{
+      const r = await fetch('./alimentos.json?v='+APP_VERSION, {cache:'no-store'});
+      if(!r.ok) throw new Error('alimentos.json '+r.status);
+      const json = await r.json();
+      window.__MENU = validateMenu(json);
+    }catch(err){
+      console.error('[menu]', err);
+      window.__MENU_ERROR = err.message || String(err);
+    }
+  })();
+</script>
+
   <script type="text/babel">
     /**************
      * SEGURANÇA
@@ -715,4 +740,5 @@
                                   </button>
                                   <button onClick={()=>removeMeal(slotKey,mIdx)}
                                     className="text-xs px-2 py-0.5 rounded border border-slate-600 text-s
+
 
