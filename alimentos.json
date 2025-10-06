@@ -1,0 +1,8 @@
+{
+  "categorias": ["High Protein", "Low Carb", "BR"],
+  "itens": [
+    { "id": "whey",    "nome": "Whey Isolado (Água)", "kcal": 120, "tags": ["High Protein"] },
+    { "id": "caseina", "nome": "Shake de Caseína",    "kcal": 170, "tags": ["High Protein","Night"] },
+    { "id": "tapioca", "nome": "Tapioca 2 colheres",  "kcal": 140, "tags": ["BR","Low Fat"] }
+  ]
+}
