@@ -20,7 +20,19 @@
 </head>
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
-
+  <script>
+  // Overlay simples para mostrar erros na página (em vez de tela vazia)
+  (function () {
+    function show(msg) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;inset:0;background:#0a0a1a;color:#ffb4b4;padding:16px;font:14px/1.4 system-ui;z-index:99999;overflow:auto';
+      d.innerHTML = '<h2 style="color:#ff7070;margin:0 0 8px">Erro ao iniciar o app</h2><pre style="white-space:pre-wrap">'+msg+'</pre>';
+      document.body.appendChild(d);
+    }
+    window.addEventListener('error', e => show('[global] ' + e.message + ' @ ' + (e.filename||'') + ':' + e.lineno));
+    window.addEventListener('unhandledrejection', e => show('[promise] ' + (e.reason && (e.reason.stack||e.reason.message||e.reason) )));
+  })();
+</script>
   <script type="text/babel">
     /**************
      * SEGURANÇA
@@ -703,3 +715,4 @@
                                   </button>
                                   <button onClick={()=>removeMeal(slotKey,mIdx)}
                                     className="text-xs px-2 py-0.5 rounded border border-slate-600 text-s
+
