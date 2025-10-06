@@ -70,6 +70,40 @@
     });
 
     const { useMemo, useState, useEffect } = React;
+function App(){
+  // ... seus hooks que já existem no topo ...
+
+  // Dados externos (JSON). Não param o app se falhar:
+  const [menuData, setMenuData] = React.useState(() => window.__MENU || null);
+  const [menuError, setMenuError] = React.useState(() => window.__MENU_ERROR || null);
+
+  React.useEffect(() => {
+    // Se o loader ainda não concluiu quando o React montou:
+    if (menuData || menuError) return;
+    // Poll leve por até ~2s esperando o loader preencher __MENU
+    let tries = 0, t = setInterval(() => {
+      tries++;
+      if (window.__MENU) { setMenuData(window.__MENU); clearInterval(t); }
+      if (window.__MENU_ERROR) { setMenuError(window.__MENU_ERROR); clearInterval(t); }
+      if (tries > 20) { setMenuError('Timeout carregando alimentos.json'); clearInterval(t); }
+    }, 100);
+    return () => clearInterval(t);
+  }, [menuData, menuError]);
+
+  // Render seguro caso JSON quebre:
+  if (menuError) {
+    return <div style={{padding:16,color:'#ffb4b4'}}>
+      Falha ao carregar cardápio: {menuError}<br/>
+      <small>Tente abrir <a href="./alimentos.json" style={{color:'#9ae6b4'}}>alimentos.json</a> direto ou
+      recarregue com Ctrl+F5.</small>
+    </div>;
+  }
+
+  // (Opcional) Exemplo de uso dos dados:
+  // if (menuData) console.log('Itens:', menuData.itens.length);
+
+  // ... resto do seu App como já está ...
+}
 
     /**********************
      * CONSTANTES/UTILS
@@ -740,5 +774,6 @@
                                   </button>
                                   <button onClick={()=>removeMeal(slotKey,mIdx)}
                                     className="text-xs px-2 py-0.5 rounded border border-slate-600 text-s
+
 
 
