@@ -138,7 +138,19 @@
     function saveState(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
     }
-
+// ===== LOCAL STORAGE (com namespace por usuário) =====
+function nsKey(base, uid) {
+  return `${base}__${uid || 'anon'}`;
+}
+function loadStateNS(base, uid, fallback) {
+  return loadState(nsKey(base, uid), fallback);
+}
+function saveStateNS(base, uid, value) {
+  return saveState(nsKey(base, uid), value);
+}
+function clearStateNS(base, uid) {
+  try { localStorage.removeItem(nsKey(base, uid)); } catch {}
+}
     // ===== DEFAULTS =====
     const DEFAULT_PROFILE = {
       sex: "M", age: 33, weight: 73, height: 170,
@@ -222,32 +234,60 @@
 
     // ===== APP =====
     function App() {
-      // ---- Estado base
-      const [profile, setProfile] = useState(() => loadState(PROFILE_STORAGE_KEY, DEFAULT_PROFILE));
-      const [isProfileLocked, setIsProfileLocked] = useState(false);
+     // ---- Estado base (namespaced por usuário)
+const uidRef = useRef('anon');
 
-      const [slotKeys, setSlotKeys] = useState(() => {
-        const k = loadState(SLOTS_STORAGE_KEY, INITIAL_SLOT_KEYS);
-        return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
-      });
-      const [currentDayId, setCurrentDayId] = useState(() => loadState(CURRENT_DAY_ID_STORAGE_KEY, INITIAL_DAY_ID));
-      const [allDays, setAllDays] = useState(() => {
-        const d = loadState(ALL_DAYS_STORAGE_KEY, {});
-        if (!Object.keys(d).length || !d[INITIAL_DAY_ID]) return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
-        return d;
-      });
-      const day = allDays[currentDayId] || getInitialDayState(slotKeys);
+const [profile, setProfile] = useState(() =>
+  loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE)
+);
+const [isProfileLocked, setIsProfileLocked] = useState(false);
 
-      const [favorites, setFavorites] = useState(()=> new Set(loadState(FAVORITES_STORAGE_KEY, [])));
-      const [usage, setUsage] = useState(()=> loadState(USAGE_STORAGE_KEY, {})); // {recipeId: count}
+const [slotKeys, setSlotKeys] = useState(() => {
+  const k = loadStateNS(SLOTS_STORAGE_KEY, uidRef.current, INITIAL_SLOT_KEYS);
+  return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
+});
+const [currentDayId, setCurrentDayId] = useState(() =>
+  loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, INITIAL_DAY_ID)
+);
+const [allDays, setAllDays] = useState(() => {
+  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, {});
+  if (!Object.keys(d).length || !d[INITIAL_DAY_ID]) return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
+  return d;
+});
+const day = allDays[currentDayId] || getInitialDayState(slotKeys);
 
-      useEffect(()=> saveState(PROFILE_STORAGE_KEY, profile), [profile]);
-      useEffect(()=> saveState(ALL_DAYS_STORAGE_KEY, allDays), [allDays]);
-      useEffect(()=> saveState(CURRENT_DAY_ID_STORAGE_KEY, currentDayId), [currentDayId]);
-      useEffect(()=> saveState(SLOTS_STORAGE_KEY, slotKeys), [slotKeys]);
-      useEffect(()=> saveState(FAVORITES_STORAGE_KEY, Array.from(favorites)), [favorites]);
-      useEffect(()=> saveState(USAGE_STORAGE_KEY, usage), [usage]);
+const [favorites, setFavorites] = useState(() =>
+  new Set(loadStateNS(FAVORITES_STORAGE_KEY, uidRef.current, []))
+);
+const [usage, setUsage] = useState(() =>
+  loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {})   // {recipeId: count}
+);
+     useEffect(()=> saveStateNS(PROFILE_STORAGE_KEY, uidRef.current, profile), [profile]);
+useEffect(()=> saveStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, allDays), [allDays]);
+useEffect(()=> saveStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, currentDayId), [currentDayId]);
+useEffect(()=> saveStateNS(SLOTS_STORAGE_KEY, uidRef.current, slotKeys), [slotKeys]);
+useEffect(()=> saveStateNS(FAVORITES_STORAGE_KEY, uidRef.current, Array.from(favorites)), [favorites]);
+useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
 
+      // Quando a sessão muda, apontamos para o namespace do novo usuário e recarregamos o estado local
+useEffect(() => {
+  const uid = session?.user?.id || 'anon';
+  if (uidRef.current === uid) return;
+  uidRef.current = uid;
+
+  // Recarrega do storage namespaced
+  setProfile(loadStateNS(PROFILE_STORAGE_KEY, uid, DEFAULT_PROFILE));
+  const k = loadStateNS(SLOTS_STORAGE_KEY, uid, INITIAL_SLOT_KEYS);
+  setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
+
+  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uid, {});
+  setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
+
+  setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
+  setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, uid, [])));
+  setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
+}, [session]);
+      
       // ---- Biblioteca (com cache)
       const [externalMeals, setExternalMeals] = useState([]);
       useEffect(()=>{ fetchExternalMealsSafe(false).then(setExternalMeals); }, []);
@@ -518,8 +558,22 @@
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) return alert(error.message);
       }
-      async function signOut() { await sb.auth.signOut(); }
-
+     async function signOut() {
+  await sb.auth.signOut();
+  // troca para namespace anon imediatamente
+  uidRef.current = 'anon';
+  // limpa visualmente perfil/foto para o default e recarrega estado anon
+  const anonProfile = loadStateNS(PROFILE_STORAGE_KEY, 'anon', DEFAULT_PROFILE);
+  setProfile({ ...anonProfile, photoUrl: DEFAULT_PROFILE.photoUrl, photoUpdatedAt: null });
+  const k = loadStateNS(SLOTS_STORAGE_KEY, 'anon', INITIAL_SLOT_KEYS);
+  setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
+  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, 'anon', {});
+  setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
+  setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, 'anon', INITIAL_DAY_ID));
+  setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, 'anon', [])));
+  setUsage(loadStateNS(USAGE_STORAGE_KEY, 'anon', {}));
+}
+      
       function snapshot() {
         return JSON.stringify({
           profile,
@@ -695,6 +749,56 @@
       };
 
       // ---- UI
+            // ---- UI
+
+      // >>> LOGIN-GATE: mostra só a tela de login enquanto não há sessão
+      if (authReady && !session) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-[#0a0a1a] px-4">
+            <div className="w-full max-w-md bg-slate-800/70 rounded-2xl p-6 border border-slate-700/60 shadow">
+              <h1 className="text-xl font-semibold text-slate-100 mb-1 text-center">Cardápio Inteligente</h1>
+              <p className="text-xs text-slate-400 mb-5 text-center">
+                Entre para acessar seu perfil, biblioteca e dias salvos.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <input
+                  value={email}
+                  onChange={(e)=> setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e)=> setPassword(e.target.value)}
+                  placeholder="senha"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                />
+
+                <button
+                  onClick={signInPassword}
+                  className="text-sm px-3 py-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  Entrar
+                </button>
+                <button
+                  onClick={signUpPassword}
+                  className="text-sm px-3 py-2 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10"
+                >
+                  Criar conta
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 mt-4 text-center">
+                Suas informações ficam salvas na nuvem e só aparecem quando você estiver logado.
+              </p>
+            </div>
+          </div>
+        );
+      }
+      // <<< LOGIN-GATE
+
       return (
         <div className="min-h-screen">
           <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#0a0a1a]/90 backdrop-blur z-20">
@@ -1237,3 +1341,4 @@
   </script>
 </body>
 </html>
+
