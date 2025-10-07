@@ -1,32 +1,62 @@
 {
-  "categorias": ["High Protein", "Low Carb", "High Carb", "Balanced", "Plant-Based", "High Fat", "Post-Workout", "BR", "Night", "Quick"],
+  "categorias": ["High Protein","Low Carb","High Carb","Balanced","Plant-Based","High Fat","Post-Workout","BR","Night","Quick"],
   "items": [
-    { "id": "whey",           "nome": "Whey Isolado (Água)",              "kcal": 155, "protein": 25, "carbs": 5,  "fats": 4,  "tags": ["High Protein","Quick"] },
-    { "id": "caseina",        "nome": "Caseína (Pré-cama)",               "kcal": 170, "protein": 30, "carbs": 4,  "fats": 3,  "tags": ["High Protein","Night"] },
-    { "id": "ovos_cozidos",   "nome": "2 Ovos Cozidos",                   "kcal": 140, "protein": 12, "carbs": 1,  "fats": 10, "tags": ["Low Carb","High Fat","Quick"] },
-    { "id": "banana_pasta",   "nome": "Banana + Pasta de Amendoim",       "kcal": 250, "protein": 7,  "carbs": 35, "fats": 8,  "tags": ["Balanced","High Carb","Plant-Based"] },
-    { "id": "iogurte_bowl",   "nome": "Iogurte Proteico + Aveia e Fruta", "kcal": 345, "protein": 14, "carbs": 51, "fats": 10, "tags": ["Balanced","Quick"] },
-    { "id": "tapioca_mix",    "nome": "Tapioca com Ovo e Queijo",         "kcal": 360, "protein": 25, "carbs": 35, "fats": 15, "tags": ["Balanced","Quick","BR"] },
-    { "id": "pos_treino",     "nome": "Shake Pós-Treino Completo",        "kcal": 325, "protein": 29, "carbs": 35, "fats": 6,  "tags": ["High Protein","Post-Workout","High Carb"] },
+    /* =========================
+       BLOCO 250 (200–300 kcal)
+       ========================= */
+    { "id": "whey_agua",        "nome": "Whey Isolado (Água)",                   "kcal": 155, "protein": 25, "carbs": 5,  "fats": 4,  "tags": ["High Protein","Quick"],                    "block": "250" },
+    { "id": "caseina_night",    "nome": "Caseína (Pré-cama)",                    "kcal": 170, "protein": 30, "carbs": 4,  "fats": 3,  "tags": ["High Protein","Night"],                    "block": "250" },
+    { "id": "ovos_2",           "nome": "2 Ovos Cozidos",                        "kcal": 140, "protein": 12, "carbs": 1,  "fats": 10, "tags": ["Low Carb","High Fat","Quick","BR"],        "block": "250" },
+    { "id": "banana_pasta_peq", "nome": "Banana + Pasta de Amendoim (peq.)",     "kcal": 250, "protein": 7,  "carbs": 35, "fats": 8,  "tags": ["Balanced","High Carb","BR"],               "block": "250" },
+    { "id": "iogurte_mel",      "nome": "Iogurte Grego + Mel (copinho)",         "kcal": 240, "protein": 15, "carbs": 25, "fats": 8,  "tags": ["Balanced","Quick"],                        "block": "250" },
+    { "id": "pao_queijo_light", "nome": "1 Fatia Pão Integral + Queijo Minas",   "kcal": 230, "protein": 12, "carbs": 28, "fats": 6,  "tags": ["Balanced","BR","Quick"],                    "block": "250" },
+    { "id": "tapioca_peq",      "nome": "Tapioca Pequena (recheio leve)",        "kcal": 230, "protein": 6,  "carbs": 40, "fats": 4,  "tags": ["High Carb","BR","Quick"],                  "block": "250" },
+    { "id": "maca_castanhas",   "nome": "Maçã + Castanhas (mistas)",             "kcal": 230, "protein": 4,  "carbs": 28, "fats": 10, "tags": ["Plant-Based","Balanced","Quick"],          "block": "250" },
+    { "id": "vit_cacau",        "nome": "Vitamina (leite desnatado + cacau)",    "kcal": 230, "protein": 14, "carbs": 30, "fats": 5,  "tags": ["Balanced","Quick"],                        "block": "250" },
+    { "id": "brigadeiro_fit",   "nome": "Brigadeiro Fit (2 unid.)",              "kcal": 220, "protein": 6,  "carbs": 24, "fats": 8,  "tags": ["Balanced","Night","BR"],                   "block": "250" },
 
-    { "id": "frango_prato",   "nome": "Frango + Arroz + Feijão + Salada", "kcal": 485, "protein": 43, "carbs": 48, "fats": 10, "tags": ["Balanced","High Protein","BR"] },
-    { "id": "salmao_quinoa",  "nome": "Salmão + Quinoa + Espinafre",      "kcal": 507, "protein": 31, "carbs": 19, "fats": 32, "tags": ["Balanced","High Fat"] },
-    { "id": "massa_pesto",    "nome": "Massa Integral + Pesto + Frango",  "kcal": 746, "protein": 52, "carbs": 55, "fats": 28, "tags": ["High Carb","High Protein","Post-Workout"] },
+    /* =========================
+       BLOCO 350 (300–400 kcal)
+       ========================= */
+    { "id": "tapioca_ovo_queijo", "nome": "Tapioca c/ Ovo e Queijo",            "kcal": 360, "protein": 23, "carbs": 35, "fats": 12, "tags": ["Balanced","Quick","BR"],                    "block": "350" },
+    { "id": "sand_peru",          "nome": "Sanduíche Peito de Peru (integral)", "kcal": 330, "protein": 24, "carbs": 35, "fats": 9,  "tags": ["Balanced","Quick","BR"],                    "block": "350" },
+    { "id": "iogurte_granola",    "nome": "Iogurte + Granola + Fruta",          "kcal": 340, "protein": 16, "carbs": 45, "fats": 9,  "tags": ["Balanced","Quick"],                        "block": "350" },
+    { "id": "shake_pos",          "nome": "Shake Pós-Treino Completo",          "kcal": 350, "protein": 29, "carbs": 35, "fats": 6,  "tags": ["High Protein","Post-Workout"],              "block": "350" },
+    { "id": "omelete_queijo",     "nome": "Omelete 3 ovos + queijo + tomate",   "kcal": 340, "protein": 24, "carbs": 6,  "fats": 22, "tags": ["High Fat","BR"],                            "block": "350" },
+    { "id": "crepioca_frango",    "nome": "Crepioca Recheada de Frango",        "kcal": 350, "protein": 28, "carbs": 35, "fats": 8,  "tags": ["High Protein","BR"],                        "block": "350" },
+    { "id": "pao_ovo",            "nome": "2 Fatias Integral + Ovo Mexido",     "kcal": 350, "protein": 20, "carbs": 40, "fats": 12, "tags": ["Balanced","BR"],                            "block": "350" },
+    { "id": "cuscuz_nordeste",    "nome": "Cuscuz + Ovo + Queijo Coalho",       "kcal": 350, "protein": 22, "carbs": 45, "fats": 9,  "tags": ["Balanced","BR"],                            "block": "350" },
+    { "id": "panq_banana",        "nome": "Panqueca de Banana e Aveia",         "kcal": 360, "protein": 14, "carbs": 55, "fats": 9,  "tags": ["Balanced","Plant-Based","BR"],             "block": "350" },
+    { "id": "mugcake_choco",      "nome": "Mug Cake de Chocolate (fit)",        "kcal": 330, "protein": 20, "carbs": 35, "fats": 10, "tags": ["Balanced","Night"],                        "block": "350" },
 
-    { "id": "arroz_feijao",   "nome": "Arroz + Feijão (porção média)",    "kcal": 230, "protein": 7,  "carbs": 43, "fats": 1,  "tags": ["Balanced","BR"] },
-    { "id": "frango_grelhado","nome": "Peito de Frango Grelhado (150g)",  "kcal": 248, "protein": 45, "carbs": 0,  "fats": 6,  "tags": ["High Protein","Low Carb"] },
-    { "id": "patinho_moido",  "nome": "Patinho Moído (120g)",             "kcal": 240, "protein": 27, "carbs": 0,  "fats": 14, "tags": ["High Protein","BR"] },
-    { "id": "ovo_mexido",     "nome": "Ovos Mexidos (3 unid.)",           "kcal": 270, "protein": 18, "carbs": 2,  "fats": 21, "tags": ["High Fat","Low Carb","BR"] },
-    { "id": "abacate",        "nome": "Meio Abacate",                     "kcal": 160, "protein": 2,  "carbs": 9,  "fats": 15, "tags": ["Plant-Based","High Fat","Quick"] },
-    { "id": "pao_integral",   "nome": "2 Fatias Pão Integral",            "kcal": 220, "protein": 8,  "carbs": 36, "fats": 3,  "tags": ["High Carb","BR","Quick"] },
-    { "id": "queijo_minas",   "nome": "Queijo Minas (50g)",               "kcal": 160, "protein": 12, "carbs": 2,  "fats": 12, "tags": ["Balanced","BR","Quick"] },
-    { "id": "batata_doce",    "nome": "Batata Doce (150g cozida)",        "kcal": 135, "protein": 2,  "carbs": 31, "fats": 0,  "tags": ["High Carb","BR"] },
-    { "id": "arroz_integral", "nome": "Arroz Integral (150g cozido)",     "kcal": 195, "protein": 4,  "carbs": 40, "fats": 1,  "tags": ["High Carb","BR"] },
-    { "id": "feijao",         "nome": "Feijão Carioca (150g cozido)",     "kcal": 150, "protein": 10, "carbs": 26, "fats": 1,  "tags": ["Balanced","BR"] },
-    { "id": "salada_ovo",     "nome": "Salada Verde com 2 Ovos",          "kcal": 210, "protein": 14, "carbs": 8,  "fats": 13, "tags": ["Low Carb","High Fat","Quick"] },
-    { "id": "overnight",      "nome": "Overnight Oats (aveia+iogurte)",   "kcal": 290, "protein": 13, "carbs": 40, "fats": 8,  "tags": ["Balanced","Plant-Based","Quick"] },
-    { "id": "peito_peru",     "nome": "Sanduíche de Peito de Peru",       "kcal": 320, "protein": 22, "carbs": 36, "fats": 9,  "tags": ["Balanced","Quick","BR"] },
-    { "id": "tilapia",        "nome": "Tilápia Grelhada (150g)",          "kcal": 190, "protein": 32, "carbs": 0,  "fats": 6,  "tags": ["High Protein","Low Carb"] },
-    { "id": "strogonoff_lite","nome": "Strogonoff de Frango (200g)",      "kcal": 380, "protein": 30, "carbs": 10, "fats": 24, "tags": ["Balanced","BR"] }
+    /* =========================
+       BLOCO 500 (450–550 kcal)
+       ========================= */
+    { "id": "frango_arroz_feijao", "nome": "Frango + Arroz + Feijão + Salada",  "kcal": 490, "protein": 43, "carbs": 48, "fats": 10, "tags": ["Balanced","High Protein","BR"],             "block": "500" },
+    { "id": "patinho_prato",       "nome": "Bife de Patinho + Arroz + Feijão",  "kcal": 520, "protein": 45, "carbs": 55, "fats": 14, "tags": ["Balanced","BR","High Protein"],             "block": "500" },
+    { "id": "frango_batata",       "nome": "Frango + Batata Doce + Salada",     "kcal": 500, "protein": 40, "carbs": 60, "fats": 10, "tags": ["High Protein","BR"],                        "block": "500" },
+    { "id": "tilapia_pure",        "nome": "Tilápia + Purê de Batata + Legumes","kcal": 480, "protein": 35, "carbs": 55, "fats": 12, "tags": ["Balanced"],                                 "block": "500" },
+    { "id": "massa_carne",         "nome": "Macarrão Integral + Carne Moída",   "kcal": 500, "protein": 30, "carbs": 65, "fats": 12, "tags": ["High Carb","BR"],                           "block": "500" },
+    { "id": "strogonoff_arroz",    "nome": "Strogonoff de Frango + Arroz",      "kcal": 505, "protein": 34, "carbs": 60, "fats": 14, "tags": ["Balanced","BR"],                            "block": "500" },
+    { "id": "salmao_quinoa",       "nome": "Salmão + Quinoa + Salada",          "kcal": 498, "protein": 31, "carbs": 35, "fats": 26, "tags": ["Balanced","High Fat Saudável"],             "block": "500" },
+    { "id": "escondidinho_frango", "nome": "Escondidinho de Frango (leve)",     "kcal": 490, "protein": 36, "carbs": 55, "fats": 14, "tags": ["Balanced","BR"],                            "block": "500" },
+    { "id": "feijoada_magra",      "nome": "Feijoada Magra (porção)",           "kcal": 480, "protein": 30, "carbs": 50, "fats": 12, "tags": ["Balanced","BR"],                            "block": "500" },
+    { "id": "poke_caseiro",        "nome": "Poke de Arroz + Atum + Avocado",    "kcal": 515, "protein": 35, "carbs": 60, "fats": 15, "tags": ["Balanced"],                                 "block": "500" },
+    { "id": "yakisoba_frango",     "nome": "Yakisoba Caseiro de Frango",        "kcal": 485, "protein": 28, "carbs": 70, "fats": 10, "tags": ["Balanced","High Carb"],                     "block": "500" },
+    { "id": "lasanha_abo",         "nome": "Lasanha de Abobrinha (frango/queijo)","kcal": 470, "protein": 32, "carbs": 30, "fats": 22, "tags": ["Balanced","Low Carb","BR"],               "block": "500" },
+
+    /* =========================
+       BLOCO 750 (700–800 kcal)
+       ========================= */
+    { "id": "massa_pesto_frango",  "nome": "Massa Integral + Frango + Pesto",   "kcal": 746, "protein": 52, "carbs": 55, "fats": 28, "tags": ["High Carb","High Protein","Post-Workout"],  "block": "750" },
+    { "id": "burger_patinho",      "nome": "Hambúrguer Patinho + Pão + Batata", "kcal": 720, "protein": 45, "carbs": 65, "fats": 30, "tags": ["Balanced","BR"],                            "block": "750" },
+    { "id": "strogonoff_completo", "nome": "Strogonoff + Arroz + Batata Palha", "kcal": 720, "protein": 40, "carbs": 70, "fats": 28, "tags": ["Balanced","BR"],                            "block": "750" },
+    { "id": "feijoada_completa",   "nome": "Feijoada Completa (porção casa)",   "kcal": 730, "protein": 40, "carbs": 70, "fats": 32, "tags": ["BR","High Fat"],                            "block": "750" },
+    { "id": "salmao_arroz_azeite", "nome": "Salmão + Arroz + Azeite",           "kcal": 730, "protein": 40, "carbs": 70, "fats": 30, "tags": ["Balanced","High Fat Saudável"],            "block": "750" },
+    { "id": "panq_doce_pb",        "nome": "Panqueca Doce (banana + pasta am.)","kcal": 720, "protein": 20, "carbs": 95, "fats": 25, "tags": ["High Carb","Night","BR"],                   "block": "750" },
+    { "id": "acai_tigela",         "nome": "Açaí na Tigela + Granola + Banana", "kcal": 700, "protein": 10, "carbs": 110,"fats": 20, "tags": ["High Carb","Plant-Based","BR"],             "block": "750" },
+    { "id": "massa_bolonhesa",     "nome": "Macarrão à Bolonhesa (caseiro)",    "kcal": 745, "protein": 40, "carbs": 90, "fats": 25, "tags": ["High Carb","BR"],                           "block": "750" },
+    { "id": "frango_cremoso_arroz","nome": "Frango Cremoso + Arroz Integral",   "kcal": 740, "protein": 50, "carbs": 90, "fats": 20, "tags": ["High Protein","High Carb","BR"],            "block": "750" },
+    { "id": "pizza_caseira",       "nome": "Pizza Caseira (2 fatias médias)",   "kcal": 700, "protein": 32, "carbs": 80, "fats": 28, "tags": ["Balanced","BR","Night"],                    "block": "750" }
   ]
 }
