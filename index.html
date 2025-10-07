@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v5.8 • Supabase)</title>
+  <title>Cardápio Inteligente (v5.9 • Supabase)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -54,11 +54,30 @@
       return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
     }
 
+    // ===== BODYFAT (US NAVY) =====
+    // Altura/pescoço/cintura/quadril em cm; peso em kg
+    function log10(x){ return Math.log(x)/Math.LN10; }
+    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+      const h = toNum(height), n = toNum(neck), w = toNum(waist), q = toNum(hip);
+      let bf;
+      if (sex === 'F') {
+        if (h<=0 || n<=0 || w<=0 || q<=0) return { bf:null, fm:null, lm:null };
+        bf = 163.205*log10(w + q - n) - 97.684*log10(h) - 78.387;
+      } else {
+        if (h<=0 || n<=0 || w<=0) return { bf:null, fm:null, lm:null };
+        bf = 86.010*log10(w - n) - 70.041*log10(h) + 36.76;
+      }
+      bf = Math.min(60, Math.max(3, bf)); // clamp realista
+      const fm = weight * (bf/100);
+      const lm = weight - fm;
+      return { bf: round(bf,1), fm: round(fm,1), lm: round(lm,1) };
+    }
+
     // ===== STATE KEYS =====
-    const PROFILE_STORAGE_KEY = "cardapio_profile_v5_8";
-    const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_8";
-    const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_8";
-    const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_8";
+    const PROFILE_STORAGE_KEY = "cardapio_profile_v5_9";
+    const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_9";
+    const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_9";
+    const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_9";
     const INITIAL_DAY_ID = 'day-1';
     const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
 
@@ -202,17 +221,17 @@
       const targetCalories = useMemo(()=> round(adjustForGoal(tdee, safeProfile.goal)), [tdee, safeProfile.goal]);
       const macroTargets = useMemo(()=> deriveMacroTargets({ weight: safeProfile.weight, calories: targetCalories }), [safeProfile.weight, targetCalories]);
 
-      const LIB_WITH_TOTALS = useMemo(()=> withTotals(externalMeals), [externalMeals]);
-      const filteredMeals = useMemo(()=>{
-        return LIB_WITH_TOTALS.filter(m => {
-          const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
-          const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
-          const searchOk = (m.name || "").toLowerCase().includes(search.toLowerCase());
-          return blockOk && tagOk && searchOk;
-        });
-      }, [LIB_WITH_TOTALS, selectedBlock, activeTags, search]);
+      const body = useMemo(()=> calcBodyFat(safeProfile), [safeProfile.sex, safeProfile.height, safeProfile.neck, safeProfile.waist, safeProfile.hip, safeProfile.weight]);
 
-      const totals = useMemo(()=>{
+      const LIB_WITH_TOTALS = useMemo(()=> withTotals(externalMeals), [externalMeals]);
+      const filteredMeals = useMemo(()=> LIB_WITH_TOTALS.filter(m => {
+        const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
+        const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
+        const searchOk = (m.name || "").toLowerCase().includes(search.toLowerCase());
+        return blockOk && tagOk && searchOk;
+      }), [LIB_WITH_TOTALS, selectedBlock, activeTags, search]);
+
+      const totals = useMemo(()=> {
         const items = Object.values(day).flat();
         return items.reduce((acc, meal) => {
           (meal.ingredients||[]).forEach(e => {
@@ -298,18 +317,31 @@
         setProfile(p => ({ ...p, photoUrl:url }));
       };
 
-      // ===== AUTH (EMAIL + SENHA) + SYNC =====
+      // ===== AUTH (EMAIL+SENHA) =====
       const [session, setSession] = useState(null);
+      const [authReady, setAuthReady] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
       const [syncing, setSyncing] = useState(false);
-      const savePending = useRef(false);
 
-      useEffect(()=>{
-        sb.auth.getSession().then(({ data })=> setSession(data.session||null));
-        const { data: sub } = sb.auth.onAuthStateChange((_e, s)=> setSession(s));
-        return ()=> sub.subscription.unsubscribe();
-      },[]);
+      // snapshot/debounce para salvar sem piscar
+      const lastSnapRef = useRef(null);
+      const debounceRef = useRef(null);
+
+      useEffect(() => {
+        let unsub = null;
+        (async () => {
+          const { data } = await sb.auth.getSession();
+          setSession(data.session || null);
+          setAuthReady(true);
+          const sub = sb.auth.onAuthStateChange((_e, s) => {
+            setSession(s);
+            setAuthReady(true);
+          });
+          unsub = sub.data.subscription;
+        })();
+        return () => unsub?.unsubscribe();
+      }, []);
 
       async function signUpPassword() {
         if (!email || !password) return alert('Preencha e-mail e senha.');
@@ -324,6 +356,24 @@
       }
       async function signOut() { await sb.auth.signOut(); }
 
+      function snapshot(obj) {
+        return JSON.stringify({
+          profile: {
+            ...safeProfile,
+            // reduz o ruído salvando números arredondados
+            age: round(safeProfile.age, 2),
+            weight: round(safeProfile.weight, 2),
+            height: round(safeProfile.height, 2),
+            neck: round(safeProfile.neck, 2),
+            waist: round(safeProfile.waist, 2),
+            hip: round(safeProfile.hip, 2),
+          },
+          allDays,
+          slotKeys,
+          currentDayId
+        });
+      }
+
       async function loadCloud() {
         if (!session) return;
         setSyncing(true);
@@ -334,6 +384,7 @@
             user_id: session.user.id,
             profile: safeProfile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId
           });
+          lastSnapRef.current = snapshot();
           setSyncing(false);
           return;
         }
@@ -346,23 +397,34 @@
           setAllDays(Object.keys(d).length? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
           setSlotKeys(s.length? s : INITIAL_SLOT_KEYS);
           setCurrentDayId(cid);
+          // marca snapshot para não salvar logo após carregar
+          lastSnapRef.current = JSON.stringify({ profile:p, allDays:d, slotKeys:s, currentDayId:cid });
         } finally { setSyncing(false); }
       }
 
-      async function saveCloud() {
+      async function saveCloudNow() {
         if (!session) return;
-        if (syncing) { savePending.current = true; return; }
         setSyncing(true);
         await sb.from('user_state').upsert({
           user_id: session.user.id,
           profile: safeProfile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
+        lastSnapRef.current = snapshot();
         setSyncing(false);
-        if (savePending.current) { savePending.current = false; saveCloud(); }
       }
 
+      // carregar
       useEffect(()=>{ if (session) loadCloud(); }, [session]);
-      useEffect(()=>{ if (session) { const t = setTimeout(saveCloud, 600); return ()=> clearTimeout(t); } }, [safeProfile, allDays, slotKeys, currentDayId, session]);
+
+      // autosave debounced + diff
+      useEffect(() => {
+        if (!session) return;
+        const snap = snapshot();
+        if (snap === lastSnapRef.current) return;
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => { saveCloudNow(); }, 1500);
+        return () => clearTimeout(debounceRef.current);
+      }, [safeProfile, allDays, slotKeys, currentDayId, session]);
 
       // ===== UI =====
       return (
@@ -371,10 +433,10 @@
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
-                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.8)</p>
+                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.9)</p>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                {!session ? (
+                {authReady && (!session ? (
                   <>
                     <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com"
                            className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-56"/>
@@ -388,14 +450,22 @@
                 ) : (
                   <>
                     <span className="text-xs text-slate-400 hidden md:block">{session.user.email}</span>
-                    <button onClick={saveCloud} disabled={syncing}
+                    <button onClick={saveCloudNow} disabled={syncing}
                             className={`text-sm px-3 py-1 rounded border ${syncing?'border-slate-700 text-slate-500':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
-                      {syncing?'Sincronizando...':'Salvar agora'}
+                      {syncing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-25"></circle>
+                            <path d="M4 12a8 8 0 018-8" strokeWidth="2" className="opacity-75"></path>
+                          </svg>
+                          Salvando…
+                        </span>
+                      ) : 'Salvar agora'}
                     </button>
                     <button onClick={signOut}
                             className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
                   </>
-                )}
+                ))}
                 <a href="#biblioteca" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
                 <a href="#meu-dia" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
               </div>
@@ -517,6 +587,32 @@
                         <div className="text-slate-400">Macros alvo</div>
                         <div className="text-sm text-slate-300">P {macroTargets.protein} • C {macroTargets.carbs} • G {macroTargets.fats}</div>
                       </div>
+                    </div>
+
+                    {/* BODYFAT CARD */}
+                    <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-slate-300 font-semibold">Composição Corporal (US Navy)</span>
+                        <span className="text-xs text-slate-500">auto • cm</span>
+                      </div>
+                      {body.bf == null ? (
+                        <div className="text-xs text-slate-500">Preencha altura, pescoço, cintura {profile.sex==='F' ? 'e quadril ' : ''}para estimar a % de gordura.</div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                            <div className="text-slate-400 text-xs">% Gordura</div>
+                            <div className="text-2xl font-bold text-amber-300">{body.bf}%</div>
+                          </div>
+                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                            <div className="text-slate-400 text-xs">Massa Magra</div>
+                            <div className="text-xl font-semibold">{body.lm} kg</div>
+                          </div>
+                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                            <div className="text-slate-400 text-xs">Massa Gorda</div>
+                            <div className="text-xl font-semibold">{body.fm} kg</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -693,7 +789,7 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v5.8 — JSON externo + **login por e-mail/senha** + sincronização automática por usuário.
+            v5.9 — JSON externo + login por e-mail/senha + autosave com debounce + cálculo de %Gordura (US Navy).
           </footer>
         </div>
       );
