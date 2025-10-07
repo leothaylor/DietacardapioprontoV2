@@ -75,27 +75,41 @@
       return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
     }
 
-    // ===== BODYFAT (US NAVY • MÉTRICA — usa cm) =====
-    // Para M: BF% = 86.010 * log10(Cintura - Pescoço) - 70.041 * log10(Altura) + 36.76
-    // Para F: BF% = 163.205*log10(Cintura+Quadril-Pescoço) - 97.684*log10(Altura) - 78.387
-    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
-      const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
-      let bf = null;
-      if (sex === 'F') {
-        if (h>0 && n>0 && w>0 && q>0) {
-          bf = 163.205*log10(w + q - n) - 97.684*log10(h) - 78.387;
-        }
-      } else {
-        if (h>0 && n>0 && w>0) {
-          bf = 86.010*log10(w - n) - 70.041*log10(h) + 36.76;
-        }
-      }
-      if (bf == null || !Number.isFinite(bf)) return { bf:null, fm:null, lm:null };
-      bf = Math.min(60, Math.max(3, bf));
-      const fm = (+weight || 0) * (bf/100);
-      const lm = (+weight || 0) - fm;
-      return { bf: round(bf,1), fm: round(fm,1), lm: round(lm,1) };
-    }
+    // ===== BODYFAT (US NAVY • usando cm diretamente) =====
+// Homens:  %G = 86.010*log10(Cintura - Pescoço) - 70.041*log10(Altura) + 36.76
+// Mulheres:%G = 163.205*log10(Cintura + Quadril - Pescoço) - 97.684*log10(Altura) - 78.387
+// Todas as medidas em CENTÍMETROS. Retorna 1 casa decimal.
+function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+  const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
+
+  // precisa ter dados válidos:
+  if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) {
+    return { bf:null, fm:null, lm:null };
+  }
+
+  const log10 = (x) => Math.log(x) / Math.LN10;
+
+  let bf;
+  if (sex === 'F') {
+    const x = w + q - n;
+    if (x <= 0) return { bf:null, fm:null, lm:null };
+    bf = 163.205 * log10(x) - 97.684 * log10(h) - 78.387;
+  } else {
+    const x = w - n;
+    if (x <= 0) return { bf:null, fm:null, lm:null };
+    bf = 86.010 * log10(x) - 70.041 * log10(h) + 36.76;
+  }
+
+  // limitar a faixa e calcular massas
+  bf = Math.min(60, Math.max(3, bf));
+  const wt = +weight || 0;
+  const fm = wt * (bf / 100);
+  const lm = wt - fm;
+
+  // 1 casa decimal conforme você espera na UI
+  const round1 = (v) => Math.round(v * 10) / 10;
+  return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
+}
 
     // ===== STATE KEYS =====
     const NS = "cardapio_v6_0";
@@ -1422,3 +1436,4 @@
   </script>
 </body>
 </html>
+
