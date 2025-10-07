@@ -138,19 +138,20 @@
     function saveState(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
     }
-// ===== LOCAL STORAGE (com namespace por usuário) =====
-function nsKey(base, uid) {
-  return `${base}__${uid || 'anon'}`;
-}
-function loadStateNS(base, uid, fallback) {
-  return loadState(nsKey(base, uid), fallback);
-}
-function saveStateNS(base, uid, value) {
-  return saveState(nsKey(base, uid), value);
-}
-function clearStateNS(base, uid) {
-  try { localStorage.removeItem(nsKey(base, uid)); } catch {}
-}
+    // ===== LOCAL STORAGE (com namespace por usuário) =====
+    function nsKey(base, uid) {
+      return `${base}__${uid || 'anon'}`;
+    }
+    function loadStateNS(base, uid, fallback) {
+      return loadState(nsKey(base, uid), fallback);
+    }
+    function saveStateNS(base, uid, value) {
+      return saveState(nsKey(base, uid), value);
+    }
+    function clearStateNS(base, uid) {
+      try { localStorage.removeItem(nsKey(base, uid)); } catch {}
+    }
+
     // ===== DEFAULTS =====
     const DEFAULT_PROFILE = {
       sex: "M", age: 33, weight: 73, height: 170,
@@ -161,9 +162,9 @@ function clearStateNS(base, uid) {
       unitSystem: "metric" // metric | imperial
     };
     const getInitialDayState = (keys) => {
-  const base = keys.reduce((acc, k) => (acc[k] = [], acc), {});
-  return { ...base, meta: { waterMl: 0, sleepH: 0 } };
-};
+      const base = keys.reduce((acc, k) => (acc[k] = [], acc), {});
+      return { ...base, meta: { waterMl: 0, sleepH: 0 } };
+    };
 
     // ===== JSON EXTERNO (com cache simples) =====
     const JSON_URL = new URL('alimentos.json', location.href);
@@ -237,60 +238,86 @@ function clearStateNS(base, uid) {
 
     // ===== APP =====
     function App() {
-     // ---- Estado base (namespaced por usuário)
-const uidRef = useRef('anon');
+      // ---- Estado base (namespaced por usuário)
+      const uidRef = useRef('anon');
 
-const [profile, setProfile] = useState(() =>
-  loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE)
-);
-const [isProfileLocked, setIsProfileLocked] = useState(false);
+      const [profile, setProfile] = useState(() =>
+        loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE)
+      );
+      const [isProfileLocked, setIsProfileLocked] = useState(false);
 
-const [slotKeys, setSlotKeys] = useState(() => {
-  const k = loadStateNS(SLOTS_STORAGE_KEY, uidRef.current, INITIAL_SLOT_KEYS);
-  return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
-});
-const [currentDayId, setCurrentDayId] = useState(() =>
-  loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, INITIAL_DAY_ID)
-);
-const [allDays, setAllDays] = useState(() => {
-  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, {});
-  if (!Object.keys(d).length || !d[INITIAL_DAY_ID]) return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
-  return d;
-});
-const day = allDays[currentDayId] || getInitialDayState(slotKeys);
+      const [slotKeys, setSlotKeys] = useState(() => {
+        const k = loadStateNS(SLOTS_STORAGE_KEY, uidRef.current, INITIAL_SLOT_KEYS);
+        return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
+      });
+      const [currentDayId, setCurrentDayId] = useState(() =>
+        loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, INITIAL_DAY_ID)
+      );
+      const [allDays, setAllDays] = useState(() => {
+        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, {});
+        if (!Object.keys(d).length || !d[INITIAL_DAY_ID]) return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
+        return d;
+      });
+      const day = allDays[currentDayId] || getInitialDayState(slotKeys);
 
-const [favorites, setFavorites] = useState(() =>
-  new Set(loadStateNS(FAVORITES_STORAGE_KEY, uidRef.current, []))
-);
-const [usage, setUsage] = useState(() =>
-  loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {})   // {recipeId: count}
-);
-     useEffect(()=> saveStateNS(PROFILE_STORAGE_KEY, uidRef.current, profile), [profile]);
-useEffect(()=> saveStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, allDays), [allDays]);
-useEffect(()=> saveStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, currentDayId), [currentDayId]);
-useEffect(()=> saveStateNS(SLOTS_STORAGE_KEY, uidRef.current, slotKeys), [slotKeys]);
-useEffect(()=> saveStateNS(FAVORITES_STORAGE_KEY, uidRef.current, Array.from(favorites)), [favorites]);
-useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
+      const [favorites, setFavorites] = useState(() =>
+        new Set(loadStateNS(FAVORITES_STORAGE_KEY, uidRef.current, []))
+      );
+      const [usage, setUsage] = useState(() =>
+        loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {})   // {recipeId: count}
+      );
+
+      useEffect(()=> saveStateNS(PROFILE_STORAGE_KEY, uidRef.current, profile), [profile]);
+      useEffect(()=> saveStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, allDays), [allDays]);
+      useEffect(()=> saveStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, currentDayId), [currentDayId]);
+      useEffect(()=> saveStateNS(SLOTS_STORAGE_KEY, uidRef.current, slotKeys), [slotKeys]);
+      useEffect(()=> saveStateNS(FAVORITES_STORAGE_KEY, uidRef.current, Array.from(favorites)), [favorites]);
+      useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
+
+      // ---- AUTH (EMAIL+SENHA) + Autosave (pausa enquanto digita)
+      const [session, setSession] = useState(null);
+      const [authReady, setAuthReady] = useState(false);
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [syncing, setSyncing] = useState(false);
+      const [typingNumeric, setTypingNumeric] = useState(false);
+
+      const lastSnapRef = useRef(null);
+      const debounceRef = useRef(null);
+
+      useEffect(() => {
+        let unsub = null;
+        (async () => {
+          const { data } = await sb.auth.getSession();
+          setSession(data.session || null);
+          setAuthReady(true);
+          const sub = sb.auth.onAuthStateChange((_e, s) => {
+            setSession(s); setAuthReady(true);
+          });
+          unsub = sub.data.subscription;
+        })();
+        return () => unsub?.unsubscribe();
+      }, []);
 
       // Quando a sessão muda, apontamos para o namespace do novo usuário e recarregamos o estado local
-useEffect(() => {
-  const uid = session?.user?.id || 'anon';
-  if (uidRef.current === uid) return;
-  uidRef.current = uid;
+      useEffect(() => {
+        const uid = session?.user?.id || 'anon';
+        if (uidRef.current === uid) return;
+        uidRef.current = uid;
 
-  // Recarrega do storage namespaced
-  setProfile(loadStateNS(PROFILE_STORAGE_KEY, uid, DEFAULT_PROFILE));
-  const k = loadStateNS(SLOTS_STORAGE_KEY, uid, INITIAL_SLOT_KEYS);
-  setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
+        // Recarrega do storage namespaced
+        setProfile(loadStateNS(PROFILE_STORAGE_KEY, uid, DEFAULT_PROFILE));
+        const k = loadStateNS(SLOTS_STORAGE_KEY, uid, INITIAL_SLOT_KEYS);
+        setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
 
-  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uid, {});
-  setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
+        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uid, {});
+        setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
 
-  setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
-  setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, uid, [])));
-  setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
-}, [session]);
-      
+        setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
+        setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, uid, [])));
+        setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
+      }, [session]);
+
       // ---- Biblioteca (com cache)
       const [externalMeals, setExternalMeals] = useState([]);
       useEffect(()=>{ fetchExternalMealsSafe(false).then(setExternalMeals); }, []);
@@ -333,6 +360,17 @@ useEffect(() => {
           unitSystem: "imperial"
         };
       }
+
+      // >>> Forçar MÉTRICO no primeiro load (ou se vier sem unidade)
+      const forcedOnceRef = useRef(false);
+      useEffect(() => {
+        if (forcedOnceRef.current) return;
+        if (!profile?.unitSystem || profile.unitSystem !== 'metric') {
+          setProfile(p => toMetric(p));
+        }
+        forcedOnceRef.current = true;
+      }, []); // uma vez
+
       const isMetric = profile.unitSystem === "metric";
       const unit = {
         weight: isMetric ? "kg" : "lb",
@@ -388,7 +426,6 @@ useEffect(() => {
         else if (orderBy === "kcal-desc") list.sort((a,b)=> b.kcal - a.kcal);
         else if (orderBy === "protein") list.sort((a,b)=> b.protein - a.protein);
         else if (orderBy === "most-used") list.sort((a,b)=> (b.used||0) - (a.used||0));
-        // relevance default: mantém como veio (poderia sofisticar, mas ok)
         return list;
       }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
 
@@ -422,25 +459,28 @@ useEffect(() => {
       }, [slotTotals]);
 
       // ---- Helpers dia
-      // Meta do dia: água (ml) e sono (h)
-const getMeta = (d) => ({ waterMl: 0, sleepH: 0, ...(d?.meta || {}) });
+      const getSlotLabel = (k)=> `Refeição ${slotKeys.indexOf(k)+1}`;
+      const updateDay = (next)=> setAllDays(prev => ({ ...prev, [currentDayId]: next }));
 
-const addWater = (ml) => {
-  const meta = getMeta(day);
-  const next = { ...day, meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) } };
-  updateDay(next);
-};
-const setWater = (ml) => {
-  const meta = getMeta(day);
-  const next = { ...day, meta: { ...meta, waterMl: Math.max(0, +ml || 0) } };
-  updateDay(next);
-};
-const setSleep = (h) => {
-  const meta = getMeta(day);
-  const val = Math.min(12, Math.max(0, +h || 0));
-  const next = { ...day, meta: { ...meta, sleepH: val } };
-  updateDay(next);
-};
+      // Meta do dia: água (ml) e sono (h)
+      const getMeta = (d) => ({ waterMl: 0, sleepH: 0, ...(d?.meta || {}) });
+
+      const addWater = (ml) => {
+        const meta = getMeta(day);
+        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) } };
+        updateDay(next);
+      };
+      const setWater = (ml) => {
+        const meta = getMeta(day);
+        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, +ml || 0) } };
+        updateDay(next);
+      };
+      const setSleep = (h) => {
+        const meta = getMeta(day);
+        const val = Math.min(12, Math.max(0, +h || 0));
+        const next = { ...day, meta: { ...meta, sleepH: val } };
+        updateDay(next);
+      };
 
       // Copia profunda simples
       const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
@@ -542,31 +582,6 @@ const setSleep = (h) => {
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
-      // ---- AUTH (EMAIL+SENHA) + Autosave (pausa enquanto digita)
-      const [session, setSession] = useState(null);
-      const [authReady, setAuthReady] = useState(false);
-      const [email, setEmail] = useState("");
-      const [password, setPassword] = useState("");
-      const [syncing, setSyncing] = useState(false);
-      const [typingNumeric, setTypingNumeric] = useState(false);
-
-      const lastSnapRef = useRef(null);
-      const debounceRef = useRef(null);
-
-      useEffect(() => {
-        let unsub = null;
-        (async () => {
-          const { data } = await sb.auth.getSession();
-          setSession(data.session || null);
-          setAuthReady(true);
-          const sub = sb.auth.onAuthStateChange((_e, s) => {
-            setSession(s); setAuthReady(true);
-          });
-          unsub = sub.data.subscription;
-        })();
-        return () => unsub?.unsubscribe();
-      }, []);
-
       async function signUpPassword() {
         if (!email || !password) return alert('Preencha e-mail e senha.');
         const { error } = await sb.auth.signUp({ email, password });
@@ -578,22 +593,29 @@ const setSleep = (h) => {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) return alert(error.message);
       }
-     async function signOut() {
-  await sb.auth.signOut();
-  // troca para namespace anon imediatamente
-  uidRef.current = 'anon';
-  // limpa visualmente perfil/foto para o default e recarrega estado anon
-  const anonProfile = loadStateNS(PROFILE_STORAGE_KEY, 'anon', DEFAULT_PROFILE);
-  setProfile({ ...anonProfile, photoUrl: DEFAULT_PROFILE.photoUrl, photoUpdatedAt: null });
-  const k = loadStateNS(SLOTS_STORAGE_KEY, 'anon', INITIAL_SLOT_KEYS);
-  setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
-  const d = loadStateNS(ALL_DAYS_STORAGE_KEY, 'anon', {});
-  setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
-  setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, 'anon', INITIAL_DAY_ID));
-  setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, 'anon', [])));
-  setUsage(loadStateNS(USAGE_STORAGE_KEY, 'anon', {}));
-}
-      
+      async function signOut() {
+        const prevUid = session?.user?.id;
+        await sb.auth.signOut();
+
+        // Limpa storages do usuário atual
+        if (prevUid) {
+          [PROFILE_STORAGE_KEY, ALL_DAYS_STORAGE_KEY, SLOTS_STORAGE_KEY, CURRENT_DAY_ID_STORAGE_KEY, FAVORITES_STORAGE_KEY, USAGE_STORAGE_KEY]
+            .forEach(base => clearStateNS(base, prevUid));
+        }
+
+        // troca para namespace anon imediatamente
+        uidRef.current = 'anon';
+        const anonProfile = loadStateNS(PROFILE_STORAGE_KEY, 'anon', DEFAULT_PROFILE);
+        setProfile({ ...anonProfile, photoUrl: DEFAULT_PROFILE.photoUrl, photoUpdatedAt: null });
+        const k = loadStateNS(SLOTS_STORAGE_KEY, 'anon', INITIAL_SLOT_KEYS);
+        setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
+        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, 'anon', {});
+        setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
+        setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, 'anon', INITIAL_DAY_ID));
+        setFavorites(new Set(loadStateNS(FAVORITES_STORAGE_KEY, 'anon', [])));
+        setUsage(loadStateNS(USAGE_STORAGE_KEY, 'anon', {}));
+      }
+
       function snapshot() {
         return JSON.stringify({
           profile,
@@ -756,7 +778,6 @@ const setSleep = (h) => {
           try {
             const data = JSON.parse(fr.result);
             if (!data?.day) throw new Error('Arquivo inválido');
-            // garante chaves existentes
             const keys = Array.isArray(data.slotKeys) && data.slotKeys.length ? data.slotKeys : slotKeys;
             setSlotKeys(keys);
             updateDay(data.day);
@@ -767,9 +788,6 @@ const setSleep = (h) => {
         };
         fr.readAsText(file);
       };
-
-      // ---- UI
-            // ---- UI
 
       // >>> LOGIN-GATE: mostra só a tela de login enquanto não há sessão
       if (authReady && !session) {
@@ -1136,162 +1154,94 @@ const setSleep = (h) => {
                   </div>
                 }>
                 {!minDay && (
-  <>
-    {/* Meta do dia: Água e Sono */}
-    <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
-        <div className="text-slate-400 text-xs mb-1">Água (ml)</div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            value={(day?.meta?.waterMl ?? 0)}
-            onChange={(e)=> setWater(e.target.value)}
-            className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
-          />
-          <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
-          <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
-          <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-        </div>
-      </div>
+                  <>
+                    {/* Meta do dia: Água e Sono */}
+                    <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                        <div className="text-slate-400 text-xs mb-1">Água (ml)</div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={(day?.meta?.waterMl ?? 0)}
+                            onChange={(e)=> setWater(e.target.value)}
+                            className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
+                          />
+                          <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
+                          <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
+                          <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
+                        </div>
+                      </div>
 
-      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
-        <div className="text-slate-400 text-xs mb-1">Sono (h) — noite anterior</div>
-        <input
-          type="number"
-          step="0.5"
-          min="0"
-          max="12"
-          value={(day?.meta?.sleepH ?? 0)}
-          onChange={(e)=> setSleep(e.target.value)}
-          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
-        />
-      </div>
-    </div>
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                        <div className="text-slate-400 text-xs mb-1">Sono (h) — noite anterior</div>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="12"
+                          value={(day?.meta?.sleepH ?? 0)}
+                          onChange={(e)=> setSleep(e.target.value)}
+                          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
+                        />
+                      </div>
+                    </div>
 
-    <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
-
-                    {slotKeys.map(key => (
-                      <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="font-semibold text-slate-100 flex items-center gap-3">
-                            <span>{getSlotLabel(key)}</span>
-                            <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
-                              {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
-                            </span>
+                    <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                      {slotKeys.map(key => (
+                        <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="font-semibold text-slate-100 flex items-center gap-3">
+                              <span>{getSlotLabel(key)}</span>
+                              <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
+                                {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
+                              </span>
+                            </div>
+                            {slotKeys.length>1 && (
+                              <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">
+                                Remover Slot
+                              </button>
+                            )}
                           </div>
-                          {slotKeys.length>1 && (
-                            <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">
-                              Remover Slot
-                            </button>
+
+                          {(!day[key] || day[key].length===0) ? (
+                            <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">
+                              Vazio — adicione refeições da biblioteca.
+                            </div>
+                          ) : (
+                            <ul className="space-y-3">
+                              {day[key].map((meal, i) => (
+                                <MealItem
+                                  key={`${key}-${i}`}
+                                  slotKey={key}
+                                  index={i}
+                                  meal={meal}
+                                  slotKeys={slotKeys}
+                                  round={round}
+                                  resetMealIngredients={resetMealIngredients}
+                                  duplicateMealTo={duplicateMealTo}
+                                  toggleLock={toggleLock}
+                                  removeMeal={removeMeal}
+                                  updateIngredientPortion={updateIngredientPortion}
+                                  toggleIngredientIncluded={toggleIngredientIncluded}
+                                  removeIngredient={removeIngredient}
+                                  addQuickIngredient={addQuickIngredient}
+                                  getSlotLabel={getSlotLabel}
+                                />
+                              ))}
+                            </ul>
                           )}
                         </div>
+                      ))}
+                    </div>
 
-                        {(!day[key] || day[key].length===0) ? (
-                          <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">
-                            Vazio — adicione refeições da biblioteca.
-                          </div>
-                        ) : (
-                          <ul className="space-y-3">
-                            {day[key].map((meal, i) => {
-                              const menuRef = useRef(null);
-                              const [openMenu, setOpenMenu] = useState(false);
-                              useEffect(() => {
-                                const onDoc = (ev)=> { if (!menuRef.current?.contains(ev.target)) setOpenMenu(false); };
-                                document.addEventListener('click', onDoc);
-                                return ()=> document.removeEventListener('click', onDoc);
-                              }, []);
-                              const otherSlots = slotKeys.filter(sk => sk!==key);
-                              return (
-                                <li key={i} className={`p-3 border rounded-xl ${meal.isLocked?'border-emerald-500/50 bg-emerald-900/10':'border-slate-700 bg-slate-900/50'}`}>
-                                  <div className="flex justify-between items-start mb-3">
-                                    <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
-                                      {meal.name}
-                                      {meal.isLocked && (
-                                        <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
-                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
-                                        </svg>
-                                      )}
-                                    </div>
-                                    <div className="flex gap-2 items-center">
-                                      <button onClick={()=> resetMealIngredients(key,i)}
-                                              className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">
-                                        Resetar ingredientes
-                                      </button>
-                                      <div ref={menuRef} className={`menu ${openMenu?'open':''}`}>
-                                        <button onClick={()=> setOpenMenu(v=>!v)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">⋯</button>
-                                        <div className="menu-content rounded">
-                                          {otherSlots.map(tk => (
-                                            <div key={tk} className="menu-item" onClick={()=> { duplicateMealTo(key,i,tk); setOpenMenu(false); }}>
-                                              Duplicar para {getSlotLabel(tk)}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <button onClick={()=> toggleLock(key, i)}
-                                              className={`text-xs px-2 py-0.5 rounded border ${meal.isLocked?'border-red-500 text-red-300 bg-red-900/20':'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
-                                        {meal.isLocked?'Editar':'Feita'}
-                                      </button>
-                                      <button onClick={()=> removeMeal(key, i)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10">
-                                        Remover
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
-                                  <ul className="space-y-2">
-                                    {(meal.ingredients||[]).map((ing, j) => {
-                                      const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
-                                      const base=+ing.baseKcal || (p*4+c*4+f*9);
-                                      const por=+ing.portion||1;
-                                      const kcal = base*por;
-                                      const disabled = meal.isLocked;
-                                      const included = ing.included !== false;
-                                      return (
-                                        <li key={j} className={`flex flex-wrap md:flex-nowrap gap-2 justify-between items-center text-xs pl-3 py-1 border-l-2 ${included?'border-emerald-500/60':'border-slate-700 bg-slate-800/40 line-through opacity-70'}`}>
-                                          <div className="text-slate-300 flex-1 min-w-0 truncate">
-                                            {ing.name} (<strong className="text-slate-200">{round(kcal)} kcal</strong>)
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <select value={ing.portion} disabled={disabled}
-                                                    onChange={(e)=> updateIngredientPortion(key, i, j, e.target.value)}
-                                                    className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${disabled?'opacity-50 cursor-not-allowed border-slate-700':'border-slate-600'}`}>
-                                              {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
-                                            </select>
-                                            <button onClick={()=> toggleIngredientIncluded(key, i, j)} disabled={disabled}
-                                                    className={`text-xs px-2 py-0.5 rounded border ${included?'border-yellow-600 text-yellow-300 hover:bg-yellow-900/20':'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'}`}>
-                                              {included?'Excluir':'Incluir'}
-                                            </button>
-                                            <button onClick={()=> removeIngredient(key, i, j)} disabled={disabled}
-                                                    className={`text-xs p-1 rounded ${disabled?'text-slate-600 cursor-not-allowed':'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`} title="Remover ingrediente">
-                                              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                                            </button>
-                                          </div>
-                                        
-                                      );
-                                    })}
-                                  </ul>
-
-                                  {/* + Ingrediente rápido */}
-                                  <QuickAdd
-                                    onAdd={(ing)=> addQuickIngredient(key, i, ing)}
-                                    disabled={meal.isLocked}
-                                  />
-                                
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
+                      <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Calorias</div><div className="text-xl font-bold">{round(totals.kcal)}</div></div>
+                      <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Proteínas</div><div className="text-xl font-bold">{round(totals.protein)} g</div></div>
+                      <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Carboidratos</div><div className="text-xl font-bold">{round(totals.carbs)} g</div></div>
+                      <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Gorduras</div><div className="text-xl font-bold">{round(totals.fats)} g</div></div>
+                    </div>
+                  </>
                 )}
-
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
-                  <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Calorias</div><div className="text-xl font-bold">{round(totals.kcal)}</div></div>
-                  <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Proteínas</div><div className="text-xl font-bold">{round(totals.protein)} g</div></div>
-                  <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Carboidratos</div><div className="text-xl font-bold">{round(totals.carbs)} g</div></div>
-                  <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Gorduras</div><div className="text-xl font-bold">{round(totals.fats)} g</div></div>
-                </div>
               </Section>
             </div>
           </main>
@@ -1336,6 +1286,102 @@ const setSleep = (h) => {
         </div>
       );
     };
+
+    // === Item de refeição (sem hooks dentro do .map)
+    function MealItem({
+      slotKey, index, meal, slotKeys, round,
+      resetMealIngredients, duplicateMealTo, toggleLock, removeMeal,
+      updateIngredientPortion, toggleIngredientIncluded, removeIngredient, addQuickIngredient,
+      getSlotLabel
+    }) {
+      const menuRef = React.useRef(null);
+      const [openMenu, setOpenMenu] = React.useState(false);
+
+      React.useEffect(() => {
+        const onDoc = (ev) => { if (!menuRef.current?.contains(ev.target)) setOpenMenu(false); };
+        document.addEventListener('click', onDoc);
+        return () => document.removeEventListener('click', onDoc);
+      }, []);
+
+      const otherSlots = slotKeys.filter(sk => sk !== slotKey);
+
+      return (
+        <li className={`p-3 border rounded-xl ${meal.isLocked?'border-emerald-500/50 bg-emerald-900/10':'border-slate-700 bg-slate-900/50'}`}>
+          <div className="flex justify-between items-start mb-3">
+            <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
+              {meal.name}
+              {meal.isLocked && (
+                <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                </svg>
+              )}
+            </div>
+            <div className="flex gap-2 items-center">
+              <button onClick={()=> resetMealIngredients(slotKey,index)}
+                      className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">
+                Resetar ingredientes
+              </button>
+              <div ref={menuRef} className={`menu ${openMenu ? 'open' : ''}`}>
+                <button onClick={()=> setOpenMenu(v=>!v)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">⋯</button>
+                <div className="menu-content rounded">
+                  {otherSlots.map(tk => (
+                    <div key={tk} className="menu-item" onClick={()=> { duplicateMealTo(slotKey,index,tk); setOpenMenu(false); }}>
+                      Duplicar para {getSlotLabel(tk)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button onClick={()=> toggleLock(slotKey, index)}
+                      className={`text-xs px-2 py-0.5 rounded border ${meal.isLocked?'border-red-500 text-red-300 bg-red-900/20':'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
+                {meal.isLocked?'Editar':'Feita'}
+              </button>
+              <button onClick={()=> removeMeal(slotKey, index)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10">
+                Remover
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
+          <ul className="space-y-2">
+            {(meal.ingredients||[]).map((ing, j) => {
+              const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
+              const base=+ing.baseKcal || (p*4+c*4+f*9);
+              const por=+ing.portion||1;
+              const kcal = base*por;
+              const disabled = meal.isLocked;
+              const included = ing.included !== false;
+              return (
+                <li key={j} className={`flex flex-wrap md:flex-nowrap gap-2 justify-between items-center text-xs pl-3 py-1 border-l-2 ${included?'border-emerald-500/60':'border-slate-700 bg-slate-800/40 line-through opacity-70'}`}>
+                  <div className="text-slate-300 flex-1 min-w-0 truncate">
+                    {ing.name} (<strong className="text-slate-200">{round(kcal)} kcal</strong>)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={ing.portion} disabled={disabled}
+                      onChange={(e)=> updateIngredientPortion(slotKey, index, j, e.target.value)}
+                      className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${disabled?'opacity-50 cursor-not-allowed border-slate-700':'border-slate-600'}`}>
+                      {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
+                    </select>
+                    <button
+                      onClick={()=> toggleIngredientIncluded(slotKey, index, j)} disabled={disabled}
+                      className={`text-xs px-2 py-0.5 rounded border ${included?'border-yellow-600 text-yellow-300 hover:bg-yellow-900/20':'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'}`}>
+                      {included?'Excluir':'Incluir'}
+                    </button>
+                    <button
+                      onClick={()=> removeIngredient(slotKey, index, j)} disabled={disabled}
+                      className={`text-xs p-1 rounded ${disabled?'text-slate-600 cursor-not-allowed':'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`} title="Remover ingrediente">
+                      <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <QuickAdd onAdd={(ing)=> addQuickIngredient(slotKey, index, ing)} disabled={meal.isLocked} />
+        </li>
+      );
+    }
 
     // Formulário de ingrediente rápido
     function QuickAdd({ onAdd, disabled }) {
@@ -1394,5 +1440,3 @@ const setSleep = (h) => {
   </script>
 </body>
 </html>
-
-
