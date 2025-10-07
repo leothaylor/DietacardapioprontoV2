@@ -8,11 +8,11 @@
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React (produção) + erros detalhados -->
+  <!-- React (produção) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-  <!-- Babel (JSX em navegador) -->
+  <!-- Babel (JSX no navegador) -->
   <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -145,53 +145,50 @@
     };
     const getInitialDayState = (keys) => keys.reduce((acc,k)=> (acc[k]=[],acc),{});
 
-    /* ----------------- Biblioteca interna (MEALS) ------------------ */
-    const MEALS = [
-      {
-        id:"lib_whey", name:"Whey Isolado (Água)", block:"250", tags:["High Protein","Quick"],
-        ingredients:[{ name:"Whey (1 scoop)", protein:25, carbs:5, fats:4, baseKcal:155 }]
-      },
-      {
-        id:"lib_caseina", name:"Caseína Pré-cama", block:"250", tags:["High Protein","Night"],
-        ingredients:[{ name:"Caseína", protein:30, carbs:4, fats:3, baseKcal:170 }]
-      },
-      {
-        id:"lib_frango_br", name:"Frango + Arroz + Feijão", block:"500", tags:["Balanced","High Protein","BR"],
-        ingredients:[
-          { name:"Arroz (100g coz.)", protein:2, carbs:28, fats:1, baseKcal:130 },
-          { name:"Feijão (100g coz.)", protein:5, carbs:15, fats:1, baseKcal:100 },
-          { name:"Peito de frango (120g)", protein:34, carbs:0, fats:5, baseKcal:180 },
-          { name:"Azeite (1 c.chá)", protein:0, carbs:0, fats:5, baseKcal:45 },
-          { name:"Salada/legumes", protein:2, carbs:5, fats:0, baseKcal:30 }
-        ]
-      }
-    ];
-
     /* ------------- Loader robusto do alimentos.json ---------------- */
     const JSON_URL = new URL('alimentos.json', location.href);
 
+    // Se faltar block, inferimos por kcal com tolerância de ±50
+    function inferBlockByKcal(kcal) {
+      const k = Number(kcal) || 0;
+      const within = (t) => Math.abs(k - t) <= 50;
+      if (within(250)) return "250";
+      if (within(350)) return "350";
+      if (within(500)) return "500";
+      if (within(750)) return "750";
+      return "250"; // fallback
+    }
+
     function normalizeExternalItems(data) {
       if (!data || !Array.isArray(data.items)) return [];
-      return data.items.map((it, i) => ({
-        id: it.id || `ext_${i}`,
-        name: it.nome || it.name || 'Item',
-        block: String(Math.round(Number(it.kcal || 0) || 0)),
-        tags: Array.isArray(it.tags) ? it.tags : [],
-        ingredients: [{
-          name: it.nome || it.name || 'Item',
-          baseKcal: Number(it.kcal) || 0,
-          protein: Number(it.protein) || 0,
-          carbs:   Number(it.carbs)   || 0,
-          fats:    Number(it.fats)    || 0,
-          portion: 1
-        }]
-      }));
+      return data.items.map((it, i) => {
+        const protein = Number(it.protein) || 0;
+        const carbs   = Number(it.carbs)   || 0;
+        const fats    = Number(it.fats)    || 0;
+        const kcal    = Number(it.kcal)    || (protein*4 + carbs*4 + fats*9);
+        const block   = (it.block != null && it.block !== "")
+                        ? String(it.block).trim()
+                        : inferBlockByKcal(kcal);
+
+        return {
+          id: it.id || `ext_${i}`,
+          name: it.name || it.nome || 'Item',
+          block,
+          tags: Array.isArray(it.tags) ? it.tags : [],
+          ingredients: [{
+            name: it.name || it.nome || 'Item',
+            baseKcal: kcal,
+            protein, carbs, fats,
+            portion: 1
+          }]
+        };
+      });
     }
 
     async function fetchExternalMealsSafe() {
       try {
         const u = new URL(JSON_URL);
-        u.searchParams.set('_', String(Date.now()));
+        u.searchParams.set('_', String(Date.now())); // cache-bust
         const res = await fetch(u, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
@@ -276,14 +273,17 @@
       useEffect(()=> saveState(CURRENT_DAY_ID_STORAGE_KEY, currentDayId), [currentDayId]);
       useEffect(()=> saveState(SLOTS_STORAGE_KEY, slotKeys), [slotKeys]);
 
-      // Externo (alimentos.json)
+      // Itens externos (alimentos.json)
       const [externalMeals, setExternalMeals] = useState([]);
-      useEffect(()=>{ fetchExternalMealsSafe().then(setExternalMeals); }, []);
+      const [jsonError, setJsonError] = useState("");
+      useEffect(()=>{
+        fetchExternalMealsSafe().then(setExternalMeals).catch(e=> setJsonError(String(e)));
+      }, []);
 
       // Filtros UI
       const [search, setSearch] = useState("");
       const [selectedBlock, setSelectedBlock] = useState("all");
-      const [activeTags, setActiveTags] = useState([]);
+      const [activeTags, setActiveTags] = useState([]); // (mantido para futura expansão)
       const [minProfile, setMinProfile] = useState(false);
       const [minMacros, setMinMacros] = useState(false);
       const [minLib, setMinLib] = useState(false);
@@ -295,14 +295,15 @@
       const targetCalories = useMemo(()=> round(adjustForGoal(tdee, profile.goal)), [tdee, profile.goal]);
       const macroTargets = useMemo(()=> deriveMacroTargets({ weight: profile.weight, calories: targetCalories }), [profile.weight, targetCalories]);
 
-      // Biblioteca mesclada (interna + externa) com totais
-      const LIB_WITH_TOTALS = useMemo(()=> withTotals([...MEALS, ...externalMeals]), [externalMeals]);
+      // Biblioteca (apenas JSON externo) com totais
+      const LIB_WITH_TOTALS = useMemo(()=> withTotals(externalMeals), [externalMeals]);
 
       const filteredMeals = useMemo(()=>{
         return LIB_WITH_TOTALS.filter(m => {
-          const blockOk  = selectedBlock === "all" || m.block === selectedBlock;
-          const tagOk    = activeTags.length === 0 || activeTags.every(t => m.tags.includes(t));
-          const searchOk = m.name.toLowerCase().includes(search.toLowerCase());
+          const blockOk  = selectedBlock === "all" ||
+            (String(m.block).trim() === String(selectedBlock).trim());
+          const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
+          const searchOk = (m.name || "").toLowerCase().includes(search.toLowerCase());
           return blockOk && tagOk && searchOk;
         });
       }, [LIB_WITH_TOTALS, selectedBlock, activeTags, search]);
@@ -587,7 +588,9 @@
                     ))}
                     {filteredMeals.length===0 && (
                       <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                        Nenhuma refeição encontrada. Ajuste filtros.
+                        {externalMeals.length === 0
+                          ? (jsonError ? 'Não foi possível carregar o alimentos.json.' : 'Carregando biblioteca...')
+                          : 'Nenhuma refeição encontrada. Ajuste filtros.'}
                       </div>
                     )}
                   </div>
@@ -698,7 +701,7 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            MVP visual v5.7. Perfis locais independentes + cardápio carregado via JSON.
+            v5.7 — Biblioteca 100% via JSON externo (cache-bust + normalização + tolerância de bloco).
           </footer>
         </div>
       );
