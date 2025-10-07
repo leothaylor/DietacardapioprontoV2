@@ -24,6 +24,7 @@
     const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const AVATAR_BUCKET = 'avatars';
 
     // ===== CÁLCULOS =====
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
@@ -55,39 +56,30 @@
     }
 
     // ===== BODYFAT (US NAVY • MÉTRICA — usa cm) =====
-// Entradas: altura, pescoço, cintura, quadril (F) em cm; peso em kg
-function log10(x){ return Math.log(x)/Math.LN10; }
-function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
-  const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
+    function log10(x){ return Math.log(x)/Math.LN10; }
+    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+      const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
+      let density = null;
 
-  let density = null;
+      if (sex === 'F') {
+        if (h>0 && n>0 && w>0 && q>0) {
+          density = 1.29579 - 0.35004*log10(w + q - n) + 0.22100*log10(h);
+        }
+      } else {
+        if (h>0 && n>0 && w>0) {
+          density = 1.0324 - 0.19077*log10(w - n) + 0.15456*log10(h);
+        }
+      }
+      if (!density) return { bf:null, fm:null, lm:null };
 
-  if (sex === 'F') {
-    // Mulher (métrico):
-    // D = 1.29579 − 0.35004·log10(cintura + quadril − pescoço) + 0.22100·log10(altura)
-    if (h>0 && n>0 && w>0 && q>0) {
-      density = 1.29579 - 0.35004*log10(w + q - n) + 0.22100*log10(h);
+      let bf = 495 / density - 450;
+      bf = Math.min(60, Math.max(3, bf));
+
+      const fm = (+weight || 0) * (bf/100);
+      const lm = (+weight || 0) - fm;
+
+      return { bf: Math.round(bf*10)/10, fm: Math.round(fm*10)/10, lm: Math.round(lm*10)/10 };
     }
-  } else {
-    // Homem (métrico):
-    // D = 1.0324 − 0.19077·log10(cintura − pescoço) + 0.15456·log10(altura)
-    if (h>0 && n>0 && w>0) {
-      density = 1.0324 - 0.19077*log10(w - n) + 0.15456*log10(h);
-    }
-  }
-
-  if (!density) return { bf:null, fm:null, lm:null };
-
-  // %Gordura = 495 / D − 450
-  let bf = 495 / density - 450;
-  bf = Math.min(60, Math.max(3, bf)); // clamp realista
-
-  const fm = (+weight || 0) * (bf/100);
-  const lm = (+weight || 0) - fm;
-
-  return { bf: Math.round(bf*10)/10, fm: Math.round(fm*10)/10, lm: Math.round(lm*10)/10 };
-}
-
 
     // ===== STATE KEYS =====
     const PROFILE_STORAGE_KEY = "cardapio_profile_v5_9";
@@ -133,7 +125,8 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       sex: "M", age: 33, weight: 73, height: 170,
       activity: "moderate", goal: "recomp",
       neck: 36, waist: 85, hip: 95,
-      photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto'
+      photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto',
+      photoUpdatedAt: null
     };
     const getInitialDayState = (keys) => keys.reduce((acc,k)=> (acc[k]=[],acc),{});
 
@@ -315,24 +308,6 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
-      // ===== inputs (live + blur) =====
-      const handleProfileChangeLive = (key, value) => {
-        if (isProfileLocked) return;
-        setProfile(p => ({ ...p, [key]: value }));
-      };
-      const handleProfileBlur = (key) => {
-        setProfile(p => {
-          if (['sex','activity','goal','photoUrl'].includes(key)) return p;
-          return { ...p, [key]: normalizeOnBlur(key, p[key]) };
-        });
-      };
-      const onPhoto = (e)=> {
-        if (isProfileLocked) return;
-        const f = e.target.files[0]; if (!f) return;
-        const url = URL.createObjectURL(f);
-        setProfile(p => ({ ...p, photoUrl:url }));
-      };
-
       // ===== AUTH (EMAIL+SENHA) =====
       const [session, setSession] = useState(null);
       const [authReady, setAuthReady] = useState(false);
@@ -372,17 +347,18 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       }
       async function signOut() { await sb.auth.signOut(); }
 
-      function snapshot(obj) {
+      function snapshot() {
         return JSON.stringify({
           profile: {
             ...safeProfile,
-            // reduz o ruído salvando números arredondados
             age: round(safeProfile.age, 2),
             weight: round(safeProfile.weight, 2),
             height: round(safeProfile.height, 2),
             neck: round(safeProfile.neck, 2),
             waist: round(safeProfile.waist, 2),
             hip: round(safeProfile.hip, 2),
+            photoUrl: profile.photoUrl || null,
+            photoUpdatedAt: profile.photoUpdatedAt || null,
           },
           allDays,
           slotKeys,
@@ -413,7 +389,6 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
           setAllDays(Object.keys(d).length? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
           setSlotKeys(s.length? s : INITIAL_SLOT_KEYS);
           setCurrentDayId(cid);
-          // marca snapshot para não salvar logo após carregar
           lastSnapRef.current = JSON.stringify({ profile:p, allDays:d, slotKeys:s, currentDayId:cid });
         } finally { setSyncing(false); }
       }
@@ -423,7 +398,11 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         setSyncing(true);
         await sb.from('user_state').upsert({
           user_id: session.user.id,
-          profile: safeProfile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, updated_at: new Date().toISOString()
+          profile: { ...safeProfile, photoUrl: profile.photoUrl || null, photoUpdatedAt: profile.photoUpdatedAt || null },
+          all_days: allDays,
+          slot_keys: slotKeys,
+          current_day_id: currentDayId,
+          updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         lastSnapRef.current = snapshot();
         setSyncing(false);
@@ -440,7 +419,49 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => { saveCloudNow(); }, 1500);
         return () => clearTimeout(debounceRef.current);
-      }, [safeProfile, allDays, slotKeys, currentDayId, session]);
+      }, [safeProfile, allDays, slotKeys, currentDayId, profile.photoUrl, profile.photoUpdatedAt, session]);
+
+      // ===== FOTO: upload no Storage + salva URL no profile =====
+      function getExt(name) {
+        const p = (name || '').split('.');
+        return (p.length > 1 ? p.pop() : 'jpg').toLowerCase();
+      }
+      async function onPhoto(e){
+        if (isProfileLocked) return;
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!session?.user?.id) { return alert('Faça login para salvar sua foto.'); }
+
+        const userId = session.user.id;
+        const ext = getExt(file.name);
+        const path = `u/${userId}/avatar.${ext}`;
+
+        const { error: upErr } = await sb.storage
+          .from(AVATAR_BUCKET)
+          .upload(path, file, { cacheControl: '3600', upsert: true });
+
+        if (upErr) {
+          alert('Falha no upload: ' + upErr.message);
+          return;
+        }
+
+        const { data } = sb.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+        const publicUrl = data.publicUrl;
+
+        const next = { ...profile, photoUrl: publicUrl, photoUpdatedAt: Date.now() };
+        setProfile(next);
+
+        // salva imediatamente (sem esperar debounce) para persistir a foto
+        await sb.from('user_state').upsert({
+          user_id: userId,
+          profile: { ...safeProfile, photoUrl: next.photoUrl, photoUpdatedAt: next.photoUpdatedAt },
+          all_days: allDays,
+          slot_keys: slotKeys,
+          current_day_id: currentDayId,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+        lastSnapRef.current = snapshot();
+      }
 
       // ===== UI =====
       return (
@@ -503,9 +524,12 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
                 }>
                 <div className={`flex flex-col items-center mb-4 ${isProfileLocked ? 'opacity-70' : ''}`}>
                   <label htmlFor="photo" className={isProfileLocked?'':'cursor-pointer'}>
-                    <img src={profile.photoUrl} alt="Foto"
-                         className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`}
-                         onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}/>
+                    <img
+                      src={profile.photoUrl ? `${profile.photoUrl}?v=${encodeURIComponent(profile.photoUpdatedAt || '')}` : DEFAULT_PROFILE.photoUrl}
+                      alt="Foto"
+                      className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`}
+                      onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}
+                    />
                     <input id="photo" type="file" accept="image/*" onChange={onPhoto} className="hidden" disabled={isProfileLocked}/>
                   </label>
                   <p className="text-xs text-slate-400 mt-2">{isProfileLocked?'Informações fixadas':'Clique para alterar foto'}</p>
@@ -805,7 +829,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v5.9 — JSON externo + login por e-mail/senha + autosave com debounce + cálculo de %Gordura (US Navy).
+            v5.9 — JSON externo + login por e-mail/senha + autosave com debounce + cálculo de %Gordura (US Navy) + avatar persistente em Storage.
           </footer>
         </div>
       );
@@ -849,4 +873,3 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
   </script>
 </body>
 </html>
-
