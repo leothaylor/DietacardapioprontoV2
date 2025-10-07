@@ -28,6 +28,7 @@
     // ===== CÁLCULOS =====
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
     const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
+    const toNum = v => Number.isFinite(+v) ? +v : 0;
 
     function calcBMR({ sex, weight, height, age }) {
       const s = sex === "F" ? -161 : 5;
@@ -70,12 +71,6 @@
       waist:{ min: 40, max: 150, step: 0.5 },
       hip:  { min: 50, max: 150, step: 0.5 },
     };
-
-    // ===== HELPERS PARA NÚMEROS (novo) =====
-    const toNum = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
     function normalizeOnBlur(key, value) {
       const r = INPUT_RANGES[key];
       let n = toNum(value);
@@ -91,14 +86,11 @@
       try {
         const raw = localStorage.getItem(key);
         if (raw === null || raw === "undefined") return fallback;
-        const v = JSON.parse(raw);
-        return v;
-      } catch {
-        return fallback;
-      }
+        return JSON.parse(raw);
+      } catch { return fallback; }
     }
-    function saveState(key, state) {
-      try { localStorage.setItem(key, JSON.stringify(state)); } catch(e){}
+    function saveState(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
     }
 
     // ===== DEFAULTS =====
@@ -136,36 +128,26 @@
           name: it.name || it.nome || 'Item',
           block,
           tags: Array.isArray(it.tags) ? it.tags : [],
-          ingredients: [{
-            name: it.name || it.nome || 'Item',
-            baseKcal: kcal,
-            protein, carbs, fats,
-            portion: 1
-          }]
+          ingredients: [{ name: it.name || it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
         };
       });
     }
     async function fetchExternalMealsSafe() {
       try {
-        const u = new URL(JSON_URL);
-        u.searchParams.set('_', String(Date.now()));
+        const u = new URL(JSON_URL); u.searchParams.set('_', Date.now());
         const res = await fetch(u, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        const data = JSON.parse(text);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
         return normalizeExternalItems(data);
-      } catch {
-        return [];
-      }
+      } catch { return []; }
     }
     function withTotals(meals) {
       return meals.map(meal => {
-        const ing = Array.isArray(meal.ingredients) ? meal.ingredients : [];
-        const totals = ing.reduce((a, e) => {
-          const p = Number(e.protein || 0), c = Number(e.carbs || 0), f = Number(e.fats || 0);
-          const base = Number(e.baseKcal || (p*4 + c*4 + f*9));
-          const por = Number(e.portion || 1);
-          a.kcal += base * por; a.protein += p * por; a.carbs += c * por; a.fats += f * por;
+        const totals = (meal.ingredients||[]).reduce((a, e) => {
+          const p = +e.protein||0, c = +e.carbs||0, f = +e.fats||0;
+          const base = +e.baseKcal || (p*4 + c*4 + f*9);
+          const por = +e.portion||1;
+          a.kcal += base*por; a.protein += p*por; a.carbs += c*por; a.fats += f*por;
           return a;
         }, { kcal:0, protein:0, carbs:0, fats:0 });
         return { ...meal, ...totals };
@@ -205,7 +187,6 @@
       const [minLib, setMinLib] = useState(false);
       const [minDay, setMinDay] = useState(false);
 
-      // garante número para cálculos
       const safeProfile = {
         ...profile,
         age: toNum(profile.age),
@@ -234,11 +215,10 @@
       const totals = useMemo(()=>{
         const items = Object.values(day).flat();
         return items.reduce((acc, meal) => {
-          const ing = meal.ingredients || [];
-          ing.forEach(e => {
-            const p=Number(e.protein||0), c=Number(e.carbs||0), f=Number(e.fats||0);
-            const base=Number(e.baseKcal || (p*4+c*4+f*9));
-            const por=Number(e.portion||1);
+          (meal.ingredients||[]).forEach(e => {
+            const p=+e.protein||0, c=+e.carbs||0, f=+e.fats||0;
+            const base=+e.baseKcal || (p*4+c*4+f*9);
+            const por=+e.portion||1;
             acc.kcal+=base*por; acc.protein+=p*por; acc.carbs+=c*por; acc.fats+=f*por;
           });
           return acc;
@@ -300,7 +280,7 @@
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
-      // ===== inputs (novo live/blur) =====
+      // ===== inputs (live + blur) =====
       const handleProfileChangeLive = (key, value) => {
         if (isProfileLocked) return;
         setProfile(p => ({ ...p, [key]: value }));
@@ -308,8 +288,7 @@
       const handleProfileBlur = (key) => {
         setProfile(p => {
           if (['sex','activity','goal','photoUrl'].includes(key)) return p;
-          const fixed = normalizeOnBlur(key, p[key]);
-          return { ...p, [key]: fixed };
+          return { ...p, [key]: normalizeOnBlur(key, p[key]) };
         });
       };
       const onPhoto = (e)=> {
@@ -319,28 +298,29 @@
         setProfile(p => ({ ...p, photoUrl:url }));
       };
 
-      // ===== AUTH + SYNC =====
+      // ===== AUTH (EMAIL + SENHA) + SYNC =====
       const [session, setSession] = useState(null);
       const [email, setEmail] = useState("");
-      const [otp, setOtp] = useState("");
+      const [password, setPassword] = useState("");
       const [syncing, setSyncing] = useState(false);
       const savePending = useRef(false);
 
       useEffect(()=>{
         sb.auth.getSession().then(({ data })=> setSession(data.session||null));
-        const { data:sub } = sb.auth.onAuthStateChange((_e, s)=> setSession(s));
+        const { data: sub } = sb.auth.onAuthStateChange((_e, s)=> setSession(s));
         return ()=> sub.subscription.unsubscribe();
       },[]);
 
-      async function signIn() {
-        if (!email) return;
-        await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
-        alert('Enviamos um link e também um código de 6 dígitos para o seu e-mail.');
+      async function signUpPassword() {
+        if (!email || !password) return alert('Preencha e-mail e senha.');
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) return alert(error.message);
+        alert('Conta criada! Se a confirmação de e-mail estiver ativa, confirme e depois entre.');
       }
-      async function verifyOtp() {
-        if (!email || !otp) return;
-        const { error } = await sb.auth.verifyOtp({ email, token: otp, type: 'email' });
-        if (error) alert('Código inválido ou expirado');
+      async function signInPassword() {
+        if (!email || !password) return alert('Preencha e-mail e senha.');
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) return alert(error.message);
       }
       async function signOut() { await sb.auth.signOut(); }
 
@@ -396,16 +376,24 @@
               <div className="flex items-center gap-3 flex-wrap">
                 {!session ? (
                   <>
-                    <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com" className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-56"/>
-                    <button onClick={signIn} className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Enviar código</button>
-                    <input value={otp} onChange={(e)=> setOtp(e.target.value)} placeholder="código" className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-28"/>
-                    <button onClick={verifyOtp} className="text-sm px-3 py-1 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10">Confirmar</button>
+                    <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com"
+                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-56"/>
+                    <input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} placeholder="senha"
+                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-40"/>
+                    <button onClick={signInPassword}
+                            className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
+                    <button onClick={signUpPassword}
+                            className="text-sm px-3 py-1 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10">Criar conta</button>
                   </>
                 ) : (
                   <>
                     <span className="text-xs text-slate-400 hidden md:block">{session.user.email}</span>
-                    <button onClick={saveCloud} disabled={syncing} className={`text-sm px-3 py-1 rounded border ${syncing?'border-slate-700 text-slate-500':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>{syncing?'Sincronizando...':'Salvar agora'}</button>
-                    <button onClick={signOut} className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
+                    <button onClick={saveCloud} disabled={syncing}
+                            className={`text-sm px-3 py-1 rounded border ${syncing?'border-slate-700 text-slate-500':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
+                      {syncing?'Sincronizando...':'Salvar agora'}
+                    </button>
+                    <button onClick={signOut}
+                            className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
                   </>
                 )}
                 <a href="#biblioteca" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
@@ -420,7 +408,8 @@
                 title="Seu Perfil"
                 right={
                   <div className="flex gap-2">
-                    <button onClick={()=> setIsProfileLocked(v=>!v)} className={`text-xs px-2 py-0.5 rounded border ${isProfileLocked ? 'border-red-500 text-red-300 bg-red-900/20' : 'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
+                    <button onClick={()=> setIsProfileLocked(v=>!v)}
+                            className={`text-xs px-2 py-0.5 rounded border ${isProfileLocked ? 'border-red-500 text-red-300 bg-red-900/20' : 'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
                       {isProfileLocked ? 'Editar' : 'Trancar Perfil'}
                     </button>
                     <MinBtn on={minProfile} toggle={()=> setMinProfile(v=>!v)}/>
@@ -428,7 +417,9 @@
                 }>
                 <div className={`flex flex-col items-center mb-4 ${isProfileLocked ? 'opacity-70' : ''}`}>
                   <label htmlFor="photo" className={isProfileLocked?'':'cursor-pointer'}>
-                    <img src={profile.photoUrl} alt="Foto" className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`} onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}/>
+                    <img src={profile.photoUrl} alt="Foto"
+                         className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`}
+                         onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}/>
                     <input id="photo" type="file" accept="image/*" onChange={onPhoto} className="hidden" disabled={isProfileLocked}/>
                   </label>
                   <p className="text-xs text-slate-400 mt-2">{isProfileLocked?'Informações fixadas':'Clique para alterar foto'}</p>
@@ -440,8 +431,7 @@
                       <label className="flex flex-col gap-1">
                         <span>Sexo</span>
                         <select value={profile.sex} disabled={isProfileLocked}
-                                onChange={(e)=> handleProfileChangeLive('sex', e.target.value)}
-                                onBlur={()=> handleProfileBlur('sex')}
+                                onChange={(e)=> handleProfileChangeLive('sex', e.target.value)} onBlur={()=> handleProfileBlur('sex')}
                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
                           <option value="M">Masculino</option>
                           <option value="F">Feminino</option>
@@ -450,22 +440,19 @@
                       <label className="flex flex-col gap-1">
                         <span>Idade</span>
                         <input type="number" value={profile.age} disabled={isProfileLocked}
-                               onChange={(e)=> handleProfileChangeLive('age', e.target.value)}
-                               onBlur={()=> handleProfileBlur('age')}
+                               onChange={(e)=> handleProfileChangeLive('age', e.target.value)} onBlur={()=> handleProfileBlur('age')}
                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                       </label>
                       <label className="flex flex-col gap-1">
                         <span>Peso (kg)</span>
                         <input type="number" value={profile.weight} disabled={isProfileLocked}
-                               onChange={(e)=> handleProfileChangeLive('weight', e.target.value)}
-                               onBlur={()=> handleProfileBlur('weight')}
+                               onChange={(e)=> handleProfileChangeLive('weight', e.target.value)} onBlur={()=> handleProfileBlur('weight')}
                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                       </label>
                       <label className="flex flex-col gap-1">
                         <span>Altura (cm)</span>
                         <input type="number" value={profile.height} disabled={isProfileLocked}
-                               onChange={(e)=> handleProfileChangeLive('height', e.target.value)}
-                               onBlur={()=> handleProfileBlur('height')}
+                               onChange={(e)=> handleProfileChangeLive('height', e.target.value)} onBlur={()=> handleProfileBlur('height')}
                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                       </label>
                     </div>
@@ -475,23 +462,20 @@
                       <label className="flex flex-col gap-1">
                         <span>Pescoço (cm)</span>
                         <input type="number" value={profile.neck} disabled={isProfileLocked}
-                               onChange={(e)=> handleProfileChangeLive('neck', e.target.value)}
-                               onBlur={()=> handleProfileBlur('neck')}
+                               onChange={(e)=> handleProfileChangeLive('neck', e.target.value)} onBlur={()=> handleProfileBlur('neck')}
                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                       </label>
                       <label className="flex flex-col gap-1">
                         <span>Cintura (cm)</span>
                         <input type="number" value={profile.waist} disabled={isProfileLocked}
-                               onChange={(e)=> handleProfileChangeLive('waist', e.target.value)}
-                               onBlur={()=> handleProfileBlur('waist')}
+                               onChange={(e)=> handleProfileChangeLive('waist', e.target.value)} onBlur={()=> handleProfileBlur('waist')}
                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                       </label>
                       {profile.sex==='F' && (
                         <label className="flex flex-col gap-1 col-span-2">
                           <span>Quadril (cm)</span>
                           <input type="number" value={profile.hip} disabled={isProfileLocked}
-                                 onChange={(e)=> handleProfileChangeLive('hip', e.target.value)}
-                                 onBlur={()=> handleProfileBlur('hip')}
+                                 onChange={(e)=> handleProfileChangeLive('hip', e.target.value)} onBlur={()=> handleProfileBlur('hip')}
                                  className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
                         </label>
                       )}
@@ -501,8 +485,7 @@
                       <label className="flex flex-col gap-1">
                         <span>Nível de Atividade</span>
                         <select value={profile.activity} disabled={isProfileLocked}
-                                onChange={(e)=> handleProfileChangeLive('activity', e.target.value)}
-                                onBlur={()=> handleProfileBlur('activity')}
+                                onChange={(e)=> handleProfileChangeLive('activity', e.target.value)} onBlur={()=> handleProfileBlur('activity')}
                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
                           <option value="sedentary">Sedentário</option>
                           <option value="light">Leve (1–3x/sem)</option>
@@ -514,8 +497,7 @@
                       <label className="flex flex-col gap-1">
                         <span>Objetivo</span>
                         <select value={profile.goal} disabled={isProfileLocked}
-                                onChange={(e)=> handleProfileChangeLive('goal', e.target.value)}
-                                onBlur={()=> handleProfileBlur('goal')}
+                                onChange={(e)=> handleProfileChangeLive('goal', e.target.value)} onBlur={()=> handleProfileBlur('goal')}
                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
                           <option value="loss">Emagrecer (déficit)</option>
                           <option value="maintain">Manter</option>
@@ -540,15 +522,13 @@
                 )}
               </Section>
 
-              <Section
-                title="Metas de Macros"
-                right={<MinBtn on={minMacros} toggle={()=> setMinMacros(v=>!v)}/>}>
+              <Section title="Metas de Macros" right={<MinBtn on={minMacros} toggle={()=> setMinMacros(v=>!v)}/>}>
                 {!minMacros && (
                   <>
-                    <Stat label="Calorias"   value={totals.kcal}   unit=" kcal" target={targetCalories}/>
-                    <Stat label="Proteínas"  value={totals.protein} unit=" g"    target={macroTargets.protein}/>
-                    <Stat label="Carboidratos" value={totals.carbs} unit=" g"    target={macroTargets.carbs}/>
-                    <Stat label="Gorduras"   value={totals.fats}   unit=" g"    target={macroTargets.fats}/>
+                    <Stat label="Calorias" value={totals.kcal} unit=" kcal" target={targetCalories}/>
+                    <Stat label="Proteínas" value={totals.protein} unit=" g" target={macroTargets.protein}/>
+                    <Stat label="Carboidratos" value={totals.carbs} unit=" g" target={macroTargets.carbs}/>
+                    <Stat label="Gorduras" value={totals.fats} unit=" g" target={macroTargets.fats}/>
                   </>
                 )}
               </Section>
@@ -670,9 +650,9 @@
                                 <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
                                 <ul className="space-y-2">
                                   {(meal.ingredients||[]).map((ing, j) => {
-                                    const p=Number(ing.protein||0), c=Number(ing.carbs||0), f=Number(ing.fats||0);
-                                    const base=Number(ing.baseKcal || (p*4+c*4+f*9));
-                                    const por=Number(ing.portion||1);
+                                    const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
+                                    const base=+ing.baseKcal || (p*4+c*4+f*9);
+                                    const por=+ing.portion||1;
                                     const kcal = base*por;
                                     const disabled = meal.isLocked;
                                     return (
@@ -713,7 +693,7 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v5.8 — JSON externo + login Supabase (link ou código) + sincronização automática por usuário.
+            v5.8 — JSON externo + **login por e-mail/senha** + sincronização automática por usuário.
           </footer>
         </div>
       );
