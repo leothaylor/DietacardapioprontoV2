@@ -54,24 +54,40 @@
       return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
     }
 
-    // ===== BODYFAT (US NAVY) =====
-    // Altura/pescoço/cintura/quadril em cm; peso em kg
-    function log10(x){ return Math.log(x)/Math.LN10; }
-    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
-      const h = toNum(height), n = toNum(neck), w = toNum(waist), q = toNum(hip);
-      let bf;
-      if (sex === 'F') {
-        if (h<=0 || n<=0 || w<=0 || q<=0) return { bf:null, fm:null, lm:null };
-        bf = 163.205*log10(w + q - n) - 97.684*log10(h) - 78.387;
-      } else {
-        if (h<=0 || n<=0 || w<=0) return { bf:null, fm:null, lm:null };
-        bf = 86.010*log10(w - n) - 70.041*log10(h) + 36.76;
-      }
-      bf = Math.min(60, Math.max(3, bf)); // clamp realista
-      const fm = weight * (bf/100);
-      const lm = weight - fm;
-      return { bf: round(bf,1), fm: round(fm,1), lm: round(lm,1) };
+    // ===== BODYFAT (US NAVY • MÉTRICA — usa cm) =====
+// Entradas: altura, pescoço, cintura, quadril (F) em cm; peso em kg
+function log10(x){ return Math.log(x)/Math.LN10; }
+function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+  const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
+
+  let density = null;
+
+  if (sex === 'F') {
+    // Mulher (métrico):
+    // D = 1.29579 − 0.35004·log10(cintura + quadril − pescoço) + 0.22100·log10(altura)
+    if (h>0 && n>0 && w>0 && q>0) {
+      density = 1.29579 - 0.35004*log10(w + q - n) + 0.22100*log10(h);
     }
+  } else {
+    // Homem (métrico):
+    // D = 1.0324 − 0.19077·log10(cintura − pescoço) + 0.15456·log10(altura)
+    if (h>0 && n>0 && w>0) {
+      density = 1.0324 - 0.19077*log10(w - n) + 0.15456*log10(h);
+    }
+  }
+
+  if (!density) return { bf:null, fm:null, lm:null };
+
+  // %Gordura = 495 / D − 450
+  let bf = 495 / density - 450;
+  bf = Math.min(60, Math.max(3, bf)); // clamp realista
+
+  const fm = (+weight || 0) * (bf/100);
+  const lm = (+weight || 0) - fm;
+
+  return { bf: Math.round(bf*10)/10, fm: Math.round(fm*10)/10, lm: Math.round(lm*10)/10 };
+}
+
 
     // ===== STATE KEYS =====
     const PROFILE_STORAGE_KEY = "cardapio_profile_v5_9";
@@ -833,3 +849,4 @@
   </script>
 </body>
 </html>
+
