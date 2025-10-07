@@ -3,18 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v5.7)</title>
-
-  <!-- Tailwind -->
+  <title>Cardápio Inteligente (v5.8 • Supabase)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- React (produção) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-  <!-- Babel (JSX no navegador) -->
   <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
     html, body, #root { min-height: 100vh; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif; }
@@ -23,32 +17,13 @@
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
 
-  <!-- Airbag (overlay de erro) -->
-  <script>
-  (function () {
-    function showOverlay(msg) {
-      const pre = document.createElement('pre');
-      pre.style.cssText = 'position:fixed;inset:0;margin:0;padding:16px;background:#0b1020;color:#ffb4b4;font:14px/1.5 ui-monospace,Consolas,monospace;z-index:99999;overflow:auto;white-space:pre-wrap';
-      pre.textContent = 'Erro ao iniciar o app\n' + msg;
-      document.body.appendChild(pre);
-    }
-    window.addEventListener('error', (e) => {
-      const msg = `[global] ${e.message}\n${e.filename || ''}:${e.lineno || 0}:${e.colno || 0}`;
-      console.error('[global error]', e.error || e);
-      showOverlay(msg);
-    });
-    window.addEventListener('unhandledrejection', (e) => {
-      console.error('[unhandledrejection]', e.reason);
-      showOverlay('[promise] ' + (e.reason && e.reason.stack || e.reason));
-    });
-  })();
-  </script>
-
-  <!-- App -->
   <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
+    const { useState, useMemo, useEffect, useRef } = React;
 
-    /* ------------------------- Utilidades ------------------------- */
+    const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
     const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
 
@@ -76,11 +51,10 @@
       return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
     }
 
-    /* ------------------------- Storage ------------------------- */
-    const PROFILE_STORAGE_KEY = "cardapio_profile_v5_3";
-    const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_7";
-    const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_7";
-    const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_7";
+    const PROFILE_STORAGE_KEY = "cardapio_profile_v5_8";
+    const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_8";
+    const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_8";
+    const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_8";
     const INITIAL_DAY_ID = 'day-1';
     const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
 
@@ -103,7 +77,6 @@
       }
       return n;
     }
-
     function loadState(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -122,21 +95,17 @@
           });
           if (!['M','F'].includes(v.sex))      { validated.sex = DEFAULT_PROFILE.sex; changed = true; }
           if (!['loss','maintain','gain','recomp'].includes(v.goal)) { validated.goal = DEFAULT_PROFILE.goal; changed = true; }
-          if (changed) console.warn('Perfil ajustado por dados inválidos.');
           return validated;
         }
         return v;
       } catch (e) {
-        console.warn('loadState falhou:', key, e);
         return fallback;
       }
     }
     function saveState(key, state) {
-      try { localStorage.setItem(key, JSON.stringify(state)); }
-      catch(e){ console.warn('saveState falhou', key, e); }
+      try { localStorage.setItem(key, JSON.stringify(state)); } catch(e){}
     }
 
-    /* ------------------------- Perfil padrão ------------------------- */
     const DEFAULT_PROFILE = {
       sex: "M", age: 33, weight: 73, height: 170,
       activity: "moderate", goal: "recomp",
@@ -145,10 +114,7 @@
     };
     const getInitialDayState = (keys) => keys.reduce((acc,k)=> (acc[k]=[],acc),{});
 
-    /* ------------- Loader robusto do alimentos.json ---------------- */
     const JSON_URL = new URL('alimentos.json', location.href);
-
-    // Se faltar block, inferimos por kcal com tolerância de ±50
     function inferBlockByKcal(kcal) {
       const k = Number(kcal) || 0;
       const within = (t) => Math.abs(k - t) <= 50;
@@ -156,9 +122,8 @@
       if (within(350)) return "350";
       if (within(500)) return "500";
       if (within(750)) return "750";
-      return "250"; // fallback
+      return "250";
     }
-
     function normalizeExternalItems(data) {
       if (!data || !Array.isArray(data.items)) return [];
       return data.items.map((it, i) => {
@@ -169,7 +134,6 @@
         const block   = (it.block != null && it.block !== "")
                         ? String(it.block).trim()
                         : inferBlockByKcal(kcal);
-
         return {
           id: it.id || `ext_${i}`,
           name: it.name || it.nome || 'Item',
@@ -184,22 +148,19 @@
         };
       });
     }
-
     async function fetchExternalMealsSafe() {
       try {
         const u = new URL(JSON_URL);
-        u.searchParams.set('_', String(Date.now())); // cache-bust
+        u.searchParams.set('_', String(Date.now()));
         const res = await fetch(u, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         const data = JSON.parse(text);
         return normalizeExternalItems(data);
       } catch (err) {
-        console.warn('alimentos.json indisponível/inválido:', err);
         return [];
       }
     }
-
     function withTotals(meals) {
       return meals.map(meal => {
         const ing = Array.isArray(meal.ingredients) ? meal.ingredients : [];
@@ -214,47 +175,10 @@
       });
     }
 
-    /* --------------------- UI helpers --------------------- */
-    const MinBtn = ({ on, toggle }) => (
-      <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          {on ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/> :
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"/>}
-        </svg>
-      </button>
-    );
-    const Section = ({ title, right, children }) => (
-      <div className="bg-slate-800/70 rounded-2xl p-5 shadow border border-slate-700/50">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-slate-100 text-lg font-semibold">{title}</h2>
-          {right}
-        </div>
-        {children}
-      </div>
-    );
-    const Stat = ({ label, value, unit="", target }) => {
-      const pct = Math.min(100, Math.max(0, (value / (target || 1)) * 100));
-      const ok = target ? value <= target * 1.05 : true;
-      return (
-        <div className="mb-3">
-          <div className="flex justify-between text-sm text-slate-300">
-            <span>{label}</span>
-            <span><strong className={ok?"text-green-400":"text-red-400"}>{round(value)}{unit}</strong>{target && <span className="text-slate-400"> / {round(target)}{unit}</span>}</span>
-          </div>
-          <div className="h-2 bg-slate-700 rounded">
-            <div style={{ width: `${pct}%` }} className={`h-2 rounded ${ok?"bg-green-500":"bg-red-500"}`}/>
-          </div>
-        </div>
-      );
-    };
-
-    /* ------------------------ App ------------------------ */
     function App() {
-      // Perfil
       const [profile, setProfile] = useState(() => loadState(PROFILE_STORAGE_KEY, DEFAULT_PROFILE));
       const [isProfileLocked, setIsProfileLocked] = useState(false);
 
-      // Slots & dias
       const [slotKeys, setSlotKeys] = useState(() => {
         const k = loadState(SLOTS_STORAGE_KEY, INITIAL_SLOT_KEYS);
         return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
@@ -267,48 +191,37 @@
       });
       const day = allDays[currentDayId] || getInitialDayState(slotKeys);
 
-      // Persist
       useEffect(()=> saveState(PROFILE_STORAGE_KEY, profile), [profile]);
       useEffect(()=> saveState(ALL_DAYS_STORAGE_KEY, allDays), [allDays]);
       useEffect(()=> saveState(CURRENT_DAY_ID_STORAGE_KEY, currentDayId), [currentDayId]);
       useEffect(()=> saveState(SLOTS_STORAGE_KEY, slotKeys), [slotKeys]);
 
-      // Itens externos (alimentos.json)
       const [externalMeals, setExternalMeals] = useState([]);
-      const [jsonError, setJsonError] = useState("");
-      useEffect(()=>{
-        fetchExternalMealsSafe().then(setExternalMeals).catch(e=> setJsonError(String(e)));
-      }, []);
+      useEffect(()=>{ fetchExternalMealsSafe().then(setExternalMeals); }, []);
 
-      // Filtros UI
       const [search, setSearch] = useState("");
       const [selectedBlock, setSelectedBlock] = useState("all");
-      const [activeTags, setActiveTags] = useState([]); // (mantido para futura expansão)
+      const [activeTags, setActiveTags] = useState([]);
       const [minProfile, setMinProfile] = useState(false);
       const [minMacros, setMinMacros] = useState(false);
       const [minLib, setMinLib] = useState(false);
       const [minDay, setMinDay] = useState(false);
 
-      // Cálculos
       const bmr = useMemo(()=> calcBMR(profile), [profile]);
       const tdee = useMemo(()=> calcTDEE(bmr, profile.activity), [bmr, profile.activity]);
       const targetCalories = useMemo(()=> round(adjustForGoal(tdee, profile.goal)), [tdee, profile.goal]);
       const macroTargets = useMemo(()=> deriveMacroTargets({ weight: profile.weight, calories: targetCalories }), [profile.weight, targetCalories]);
 
-      // Biblioteca (apenas JSON externo) com totais
       const LIB_WITH_TOTALS = useMemo(()=> withTotals(externalMeals), [externalMeals]);
-
       const filteredMeals = useMemo(()=>{
         return LIB_WITH_TOTALS.filter(m => {
-          const blockOk  = selectedBlock === "all" ||
-            (String(m.block).trim() === String(selectedBlock).trim());
+          const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
           const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
           const searchOk = (m.name || "").toLowerCase().includes(search.toLowerCase());
           return blockOk && tagOk && searchOk;
         });
       }, [LIB_WITH_TOTALS, selectedBlock, activeTags, search]);
 
-      // Totais do dia
       const totals = useMemo(()=>{
         const items = Object.values(day).flat();
         return items.reduce((acc, meal) => {
@@ -323,7 +236,6 @@
         }, { kcal:0, protein:0, carbs:0, fats:0 });
       }, [day]);
 
-      // Helpers
       const getSlotLabel = (k)=> `Refeição ${slotKeys.indexOf(k)+1}`;
       const updateDay = (next)=> setAllDays(prev => ({ ...prev, [currentDayId]: next }));
       const addTo = (slotKey, meal)=> {
@@ -391,23 +303,87 @@
         setProfile(p => ({ ...p, photoUrl:url }));
       };
 
+      const [session, setSession] = useState(null);
+      const [email, setEmail] = useState("");
+      const [syncing, setSyncing] = useState(false);
+      const savePending = useRef(false);
+      useEffect(()=>{ sb.auth.getSession().then(({ data })=> setSession(data.session||null)); const { data:sub } = sb.auth.onAuthStateChange((_e, s)=> setSession(s)); return ()=> sub.subscription.unsubscribe(); },[]);
+
+      async function signIn() {
+        if (!email) return;
+        await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
+        alert('Verifique seu e-mail para entrar.');
+      }
+      async function signOut() { await sb.auth.signOut(); }
+
+      async function loadCloud() {
+        if (!session) return;
+        setSyncing(true);
+        const { data, error } = await sb.from('user_state').select('*').eq('user_id', session.user.id).maybeSingle();
+        if (error) { setSyncing(false); return; }
+        if (!data) {
+          await sb.from('user_state').insert({
+            user_id: session.user.id,
+            profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId
+          });
+          setSyncing(false);
+          return;
+        }
+        try {
+          const p = data.profile || DEFAULT_PROFILE;
+          const d = data.all_days || {};
+          const s = Array.isArray(data.slot_keys)? data.slot_keys : INITIAL_SLOT_KEYS;
+          const cid = data.current_day_id || INITIAL_DAY_ID;
+          setProfile(p);
+          setAllDays(Object.keys(d).length? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
+          setSlotKeys(s.length? s : INITIAL_SLOT_KEYS);
+          setCurrentDayId(cid);
+        } finally { setSyncing(false); }
+      }
+
+      async function saveCloud() {
+        if (!session) return;
+        if (syncing) { savePending.current = true; return; }
+        setSyncing(true);
+        await sb.from('user_state').upsert({
+          user_id: session.user.id,
+          profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+        setSyncing(false);
+        if (savePending.current) { savePending.current = false; saveCloud(); }
+      }
+
+      useEffect(()=>{ if (session) loadCloud(); }, [session]);
+      useEffect(()=>{ if (session) { const t = setTimeout(saveCloud, 600); return ()=> clearTimeout(t); } }, [profile, allDays, slotKeys, currentDayId, session]);
+
       return (
         <div className="min-h-screen">
           <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#0a0a1a]/90 backdrop-blur z-20">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
-                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.7)</p>
+                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.8)</p>
               </div>
-              <div className="hidden md:flex items-center gap-3">
-                <a href="#biblioteca" className="text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
-                <a href="#meu-dia" className="text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
+              <div className="flex items-center gap-3">
+                {!session ? (
+                  <>
+                    <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com" className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-56"/>
+                    <button onClick={signIn} className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs text-slate-400 hidden md:block">{session.user.email}</span>
+                    <button onClick={saveCloud} disabled={syncing} className={`text-sm px-3 py-1 rounded border ${syncing?'border-slate-700 text-slate-500':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>{syncing?'Sincronizando...':'Salvar agora'}</button>
+                    <button onClick={signOut} className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
+                  </>
+                )}
+                <a href="#biblioteca" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
+                <a href="#meu-dia" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
               </div>
             </div>
           </header>
 
           <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Coluna 1: Perfil + Metas */}
             <div className="lg:col-span-1 flex flex-col gap-6">
               <Section
                 title="Seu Perfil"
@@ -419,7 +395,6 @@
                     <MinBtn on={minProfile} toggle={()=> setMinProfile(v=>!v)}/>
                   </div>
                 }>
-                {/* Foto sempre visível */}
                 <div className={`flex flex-col items-center mb-4 ${isProfileLocked ? 'opacity-70' : ''}`}>
                   <label htmlFor="photo" className={isProfileLocked?'':'cursor-pointer'}>
                     <img src={profile.photoUrl} alt="Foto" className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`} onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}/>
@@ -539,7 +514,6 @@
               </Section>
             </div>
 
-            {/* Coluna 2: Biblioteca + Meu Dia */}
             <div className="lg:col-span-2 grid grid-cols-1 xl:grid-cols-2 gap-6">
               <Section
                 title="Biblioteca de Refeições"
@@ -588,9 +562,7 @@
                     ))}
                     {filteredMeals.length===0 && (
                       <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                        {externalMeals.length === 0
-                          ? (jsonError ? 'Não foi possível carregar o alimentos.json.' : 'Carregando biblioteca...')
-                          : 'Nenhuma refeição encontrada. Ajuste filtros.'}
+                        Nenhuma refeição encontrada. Ajuste filtros.
                       </div>
                     )}
                   </div>
@@ -701,11 +673,44 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v5.7 — Biblioteca 100% via JSON externo (cache-bust + normalização + tolerância de bloco).
+            v5.8 — JSON externo + login Supabase + sincronização automática por usuário.
           </footer>
         </div>
       );
     }
+
+    const MinBtn = ({ on, toggle }) => (
+      <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          {on ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/> :
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"/>}
+        </svg>
+      </button>
+    );
+    const Section = ({ title, right, children }) => (
+      <div className="bg-slate-800/70 rounded-2xl p-5 shadow border border-slate-700/50">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-slate-100 text-lg font-semibold">{title}</h2>
+          {right}
+        </div>
+        {children}
+      </div>
+    );
+    const Stat = ({ label, value, unit="", target }) => {
+      const pct = Math.min(100, Math.max(0, (value / (target || 1)) * 100));
+      const ok = target ? value <= target * 1.05 : true;
+      return (
+        <div className="mb-3">
+          <div className="flex justify-between text-sm text-slate-300">
+            <span>{label}</span>
+            <span><strong className={ok?"text-green-400":"text-red-400"}>{round(value)}{unit}</strong>{target && <span className="text-slate-400"> / {round(target)}{unit}</span>}</span>
+          </div>
+          <div className="h-2 bg-slate-700 rounded">
+            <div style={{ width: `${pct}%` }} className={`h-2 rounded ${ok?"bg-green-500":"bg-red-500"}`}/>
+          </div>
+        </div>
+      );
+    };
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
