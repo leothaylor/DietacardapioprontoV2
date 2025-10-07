@@ -466,23 +466,23 @@
       // Meta do dia: água (ml) e sono (h)
       const getMeta = (d) => ({ waterMl: 0, sleepH: 0, ...(d?.meta || {}) });
 
-      const addWater = (ml) => {
-        const meta = getMeta(day);
-        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) } };
-        updateDay(next);
-      };
-      const setWater = (ml) => {
-        const meta = getMeta(day);
-        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, +ml || 0) } };
-        updateDay(next);
-      };
-      const setSleep = (h) => {
-        const meta = getMeta(day);
-        const val = Math.min(12, Math.max(0, +h || 0));
-        const next = { ...day, meta: { ...meta, sleepH: val } };
-        updateDay(next);
-      };
-
+const addWater = (ml) => {
+  const meta = getMeta(day);
+  const next = { ...day, meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) } };
+  updateDay(next);
+};
+const setWater = (ml) => {
+  const meta = getMeta(day);
+  const next = { ...day, meta: { ...meta, waterMl: Math.max(0, +ml || 0) } };
+  updateDay(next);
+};
+const setSleep = (h) => {
+  const meta = getMeta(day);
+  const val = Math.min(12, Math.max(0, +h || 0));
+  const next = { ...day, meta: { ...meta, sleepH: val } };
+  updateDay(next);
+};
+      
       // Copia profunda simples
       const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
@@ -1155,36 +1155,36 @@
                 }>
                 {!minDay && (
                   <>
-                    {/* Meta do dia: Água e Sono */}
-                    <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
-                        <div className="text-slate-400 text-xs mb-1">Água (ml)</div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={(day?.meta?.waterMl ?? 0)}
-                            onChange={(e)=> setWater(e.target.value)}
-                            className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
-                          />
-                          <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
-                          <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
-                          <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-                        </div>
-                      </div>
+                   {/* Meta do dia: Água e Sono */}
+<div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
+    <div className="text-slate-400 text-xs mb-1">Água (ml)</div>
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        value={(day?.meta?.waterMl ?? 0)}
+        onChange={(e)=> setWater(e.target.value)}
+        className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
+      />
+      <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
+      <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
+      <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
+    </div>
+  </div>
 
-                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
-                        <div className="text-slate-400 text-xs mb-1">Sono (h) — noite anterior</div>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="12"
-                          value={(day?.meta?.sleepH ?? 0)}
-                          onChange={(e)=> setSleep(e.target.value)}
-                          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
-                        />
-                      </div>
-                    </div>
+  <div className="p-3 rounded-xl bg-slate-900 border border-slate-700">
+    <div className="text-slate-400 text-xs mb-1">Sono (h) — noite anterior</div>
+    <input
+      type="number"
+      step="0.5"
+      min="0"
+      max="12"
+      value={(day?.meta?.sleepH ?? 0)}
+      onChange={(e)=> setSleep(e.target.value)}
+      className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm w-28"
+    />
+  </div>
+</div>
 
                     <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
                       {slotKeys.map(key => (
@@ -1440,4 +1440,5 @@
   </script>
 </body>
 </html>
+
 
