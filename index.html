@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v5.9 • Supabase)</title>
+  <title>Cardápio Inteligente (v6.0 • Supabase)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -12,6 +12,18 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
     html, body, #root { min-height: 100vh; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif; }
+    /* Modo compacto mobile */
+    @media (max-width: 640px) {
+      .card-compact { padding: 0.75rem !important; border-radius: 0.75rem !important; }
+      .hide-mobile { display:none !important; }
+      .meal-tags { display:none !important; }
+    }
+    /* dropdown simples */
+    .menu { position: relative; }
+    .menu > .menu-content { display:none; position:absolute; right:0; top:100%; background:#0f172a; border:1px solid #334155; border-radius:0.5rem; min-width: 180px; z-index:50; }
+    .menu.open > .menu-content { display:block; }
+    .menu-item { padding:0.5rem 0.75rem; cursor:pointer; font-size:0.875rem; color:#e2e8f0; }
+    .menu-item:hover { background:#1f2937; }
   </style>
 </head>
 <body class="bg-[#0a0a1a] text-slate-200">
@@ -26,11 +38,19 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const AVATAR_BUCKET = 'avatars';
 
-    // ===== CÁLCULOS =====
+    // ===== UTILS =====
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
     const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
     const toNum = v => Number.isFinite(+v) ? +v : 0;
+    const log10 = x => Math.log(x)/Math.LN10;
 
+    // Unidades
+    const cmToIn = cm => cm/2.54;
+    const inToCm = i => i*2.54;
+    const kgToLb = kg => kg*2.2046226218;
+    const lbToKg = lb => lb/2.2046226218;
+
+    // ===== CÁLCULOS =====
     function calcBMR({ sex, weight, height, age }) {
       const s = sex === "F" ? -161 : 5;
       return 10 * weight + 6.25 * height - 5 * age + s;
@@ -56,11 +76,9 @@
     }
 
     // ===== BODYFAT (US NAVY • MÉTRICA — usa cm) =====
-    function log10(x){ return Math.log(x)/Math.LN10; }
     function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
       let density = null;
-
       if (sex === 'F') {
         if (h>0 && n>0 && w>0 && q>0) {
           density = 1.29579 - 0.35004*log10(w + q - n) + 0.22100*log10(h);
@@ -71,21 +89,22 @@
         }
       }
       if (!density) return { bf:null, fm:null, lm:null };
-
       let bf = 495 / density - 450;
       bf = Math.min(60, Math.max(3, bf));
-
       const fm = (+weight || 0) * (bf/100);
       const lm = (+weight || 0) - fm;
-
-      return { bf: Math.round(bf*10)/10, fm: Math.round(fm*10)/10, lm: Math.round(lm*10)/10 };
+      return { bf: round(bf,1), fm: round(fm,1), lm: round(lm,1) };
     }
 
     // ===== STATE KEYS =====
-    const PROFILE_STORAGE_KEY = "cardapio_profile_v5_9";
-    const ALL_DAYS_STORAGE_KEY = "cardapio_all_days_v5_9";
-    const SLOTS_STORAGE_KEY = "cardapio_slotkeys_v5_9";
-    const CURRENT_DAY_ID_STORAGE_KEY = "cardapio_current_day_id_v5_9";
+    const NS = "cardapio_v6_0";
+    const PROFILE_STORAGE_KEY = `${NS}_profile`;
+    const ALL_DAYS_STORAGE_KEY = `${NS}_all_days`;
+    const SLOTS_STORAGE_KEY = `${NS}_slotkeys`;
+    const CURRENT_DAY_ID_STORAGE_KEY = `${NS}_current_day_id`;
+    const FAVORITES_STORAGE_KEY = `${NS}_favorites`;
+    const USAGE_STORAGE_KEY = `${NS}_usage`;
+    const JSON_CACHE_KEY = `${NS}_lib_cache`;
     const INITIAL_DAY_ID = 'day-1';
     const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
 
@@ -126,11 +145,12 @@
       activity: "moderate", goal: "recomp",
       neck: 36, waist: 85, hip: 95,
       photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto',
-      photoUpdatedAt: null
+      photoUpdatedAt: null,
+      unitSystem: "metric" // metric | imperial
     };
     const getInitialDayState = (keys) => keys.reduce((acc,k)=> (acc[k]=[],acc),{});
 
-    // ===== JSON EXTERNO =====
+    // ===== JSON EXTERNO (com cache simples) =====
     const JSON_URL = new URL('alimentos.json', location.href);
     function inferBlockByKcal(kcal) {
       const k = Number(kcal) || 0;
@@ -160,30 +180,49 @@
         };
       });
     }
-    async function fetchExternalMealsSafe() {
+    async function fetchExternalMealsSafe(force=false) {
       try {
+        const cache = loadState(JSON_CACHE_KEY, null);
+        if (!force && cache?.ts && cache?.items) {
+          return cache.items;
+        }
         const u = new URL(JSON_URL); u.searchParams.set('_', Date.now());
         const res = await fetch(u, { cache: 'no-store' });
         if (!res.ok) throw new Error();
         const data = await res.json();
-        return normalizeExternalItems(data);
-      } catch { return []; }
+        const items = normalizeExternalItems(data);
+        saveState(JSON_CACHE_KEY, { ts: Date.now(), items });
+        return items;
+      } catch { return loadState(JSON_CACHE_KEY, {items:[]}).items || []; }
     }
-    function withTotals(meals) {
-      return meals.map(meal => {
-        const totals = (meal.ingredients||[]).reduce((a, e) => {
-          const p = +e.protein||0, c = +e.carbs||0, f = +e.fats||0;
-          const base = +e.baseKcal || (p*4 + c*4 + f*9);
-          const por = +e.portion||1;
-          a.kcal += base*por; a.protein += p*por; a.carbs += c*por; a.fats += f*por;
-          return a;
-        }, { kcal:0, protein:0, carbs:0, fats:0 });
-        return { ...meal, ...totals };
-      });
-    }
+
+    // ===== Web Worker de compressão (corte 1:1 @ 512px -> WEBP/JPEG) =====
+    const workerSrc = `
+      self.onmessage = async (e) => {
+        const { file } = e.data;
+        try {
+          const arr = await file.arrayBuffer();
+          const blob = new Blob([arr]);
+          const bmp = await createImageBitmap(blob);
+          const size = 512;
+          const minSide = Math.min(bmp.width, bmp.height);
+          const sx = Math.floor((bmp.width - minSide)/2);
+          const sy = Math.floor((bmp.height - minSide)/2);
+          const canvas = new OffscreenCanvas(size, size);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(bmp, sx, sy, minSide, minSide, 0, 0, size, size);
+          const webp = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
+          self.postMessage({ ok:true, blob:webp }, [webp]);
+        } catch(err){
+          self.postMessage({ ok:false, error: err?.message || 'compress-failed' });
+        }
+      };
+    `;
+    const workerURL = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
 
     // ===== APP =====
     function App() {
+      // ---- Estado base
       const [profile, setProfile] = useState(() => loadState(PROFILE_STORAGE_KEY, DEFAULT_PROFILE));
       const [isProfileLocked, setIsProfileLocked] = useState(false);
 
@@ -199,82 +238,217 @@
       });
       const day = allDays[currentDayId] || getInitialDayState(slotKeys);
 
+      const [favorites, setFavorites] = useState(()=> new Set(loadState(FAVORITES_STORAGE_KEY, [])));
+      const [usage, setUsage] = useState(()=> loadState(USAGE_STORAGE_KEY, {})); // {recipeId: count}
+
       useEffect(()=> saveState(PROFILE_STORAGE_KEY, profile), [profile]);
       useEffect(()=> saveState(ALL_DAYS_STORAGE_KEY, allDays), [allDays]);
       useEffect(()=> saveState(CURRENT_DAY_ID_STORAGE_KEY, currentDayId), [currentDayId]);
       useEffect(()=> saveState(SLOTS_STORAGE_KEY, slotKeys), [slotKeys]);
+      useEffect(()=> saveState(FAVORITES_STORAGE_KEY, Array.from(favorites)), [favorites]);
+      useEffect(()=> saveState(USAGE_STORAGE_KEY, usage), [usage]);
 
+      // ---- Biblioteca (com cache)
       const [externalMeals, setExternalMeals] = useState([]);
-      useEffect(()=>{ fetchExternalMealsSafe().then(setExternalMeals); }, []);
+      useEffect(()=>{ fetchExternalMealsSafe(false).then(setExternalMeals); }, []);
+      const refreshLibrary = async ()=> setExternalMeals(await fetchExternalMealsSafe(true));
 
+      // ---- Filtros biblioteca
       const [search, setSearch] = useState("");
+      const [searchInIngredients, setSearchInIngredients] = useState(true);
       const [selectedBlock, setSelectedBlock] = useState("all");
       const [activeTags, setActiveTags] = useState([]);
+      const [onlyFavs, setOnlyFavs] = useState(false);
+      const [orderBy, setOrderBy] = useState("relevance"); // kcal-asc, kcal-desc, protein, most-used
       const [minProfile, setMinProfile] = useState(false);
       const [minMacros, setMinMacros] = useState(false);
       const [minLib, setMinLib] = useState(false);
       const [minDay, setMinDay] = useState(false);
 
-      const safeProfile = {
-        ...profile,
-        age: toNum(profile.age),
-        weight: toNum(profile.weight),
-        height: toNum(profile.height),
-        neck: toNum(profile.neck),
-        waist: toNum(profile.waist),
-        hip: toNum(profile.hip),
+      // ---- Unidades e perfil seguro
+      function toMetric(p) {
+        if (p.unitSystem === "metric") return p;
+        return {
+          ...p,
+          weight: round(lbToKg(p.weight),2),
+          height: Math.round(inToCm(p.height)),
+          neck: round(inToCm(p.neck),1),
+          waist: round(inToCm(p.waist),1),
+          hip: round(inToCm(p.hip),1),
+          unitSystem: "metric"
+        };
+      }
+      function toImperial(p) {
+        if (p.unitSystem === "imperial") return p;
+        return {
+          ...p,
+          weight: round(kgToLb(p.weight),1),
+          height: Math.round(cmToIn(p.height)),
+          neck: round(cmToIn(p.neck),1),
+          waist: round(cmToIn(p.waist),1),
+          hip: round(cmToIn(p.hip),1),
+          unitSystem: "imperial"
+        };
+      }
+      const isMetric = profile.unitSystem === "metric";
+      const unit = {
+        weight: isMetric ? "kg" : "lb",
+        length: isMetric ? "cm" : "in"
       };
 
+      const safeProfile = useMemo(() => {
+        // sempre calcular internamente em MÉTRICO
+        const base = isMetric ? profile : toMetric(profile);
+        return {
+          ...base,
+          age: toNum(base.age),
+          weight: toNum(base.weight),
+          height: toNum(base.height),
+          neck: toNum(base.neck),
+          waist: toNum(base.waist),
+          hip: toNum(base.hip),
+        };
+      }, [profile]);
+
+      // ---- Metas
       const bmr = useMemo(()=> calcBMR(safeProfile), [safeProfile]);
       const tdee = useMemo(()=> calcTDEE(bmr, safeProfile.activity), [bmr, safeProfile.activity]);
       const targetCalories = useMemo(()=> round(adjustForGoal(tdee, safeProfile.goal)), [tdee, safeProfile.goal]);
       const macroTargets = useMemo(()=> deriveMacroTargets({ weight: safeProfile.weight, calories: targetCalories }), [safeProfile.weight, targetCalories]);
-
       const body = useMemo(()=> calcBodyFat(safeProfile), [safeProfile.sex, safeProfile.height, safeProfile.neck, safeProfile.waist, safeProfile.hip, safeProfile.weight]);
 
-      const LIB_WITH_TOTALS = useMemo(()=> withTotals(externalMeals), [externalMeals]);
-      const filteredMeals = useMemo(()=> LIB_WITH_TOTALS.filter(m => {
-        const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
-        const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
-        const searchOk = (m.name || "").toLowerCase().includes(search.toLowerCase());
-        return blockOk && tagOk && searchOk;
-      }), [LIB_WITH_TOTALS, selectedBlock, activeTags, search]);
-
-      const totals = useMemo(()=> {
-        const items = Object.values(day).flat();
-        return items.reduce((acc, meal) => {
-          (meal.ingredients||[]).forEach(e => {
+      // ---- Biblioteca com totais + ordenação + favoritos + busca em ingrediente
+      const LIB_WITH_TOTALS = useMemo(()=> {
+        const enriched = externalMeals.map(m => {
+          const totals = (m.ingredients||[]).reduce((a, e) => {
             const p=+e.protein||0, c=+e.carbs||0, f=+e.fats||0;
             const base=+e.baseKcal || (p*4+c*4+f*9);
             const por=+e.portion||1;
-            acc.kcal+=base*por; acc.protein+=p*por; acc.carbs+=c*por; acc.fats+=f*por;
-          });
+            a.kcal+=base*por; a.protein+=p*por; a.carbs+=c*por; a.fats+=f*por;
+            return a;
+          }, { kcal:0, protein:0, carbs:0, fats:0 });
+          return { ...m, ...totals, fav: favorites.has(m.id), used: usage[m.id]||0 };
+        });
+        // filtro rápido
+        let list = enriched.filter(m => {
+          const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
+          const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
+          const term = search.trim().toLowerCase();
+          const inName = (m.name || "").toLowerCase().includes(term);
+          const inIngs = searchInIngredients && (m.ingredients||[]).some(ing => (ing.name||"").toLowerCase().includes(term));
+          const searchOk = term ? (inName || inIngs) : true;
+          const favOk = !onlyFavs || m.fav;
+          return blockOk && tagOk && searchOk && favOk;
+        });
+        // ordenação
+        if (orderBy === "kcal-asc") list.sort((a,b)=> a.kcal - b.kcal);
+        else if (orderBy === "kcal-desc") list.sort((a,b)=> b.kcal - a.kcal);
+        else if (orderBy === "protein") list.sort((a,b)=> b.protein - a.protein);
+        else if (orderBy === "most-used") list.sort((a,b)=> (b.used||0) - (a.used||0));
+        // relevance default: mantém como veio (poderia sofisticar, mas ok)
+        return list;
+      }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
+
+      // ---- Totais do dia e por slot (considerando ingredientes incluídos)
+      function sumIngredients(list) {
+        return list.reduce((acc, ing) => {
+          if (ing.included === false) return acc;
+          const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
+          const base=+ing.baseKcal || (p*4+c*4+f*9);
+          const por=+ing.portion||1;
+          acc.kcal+=base*por; acc.protein+=p*por; acc.carbs+=c*por; acc.fats+=f*por;
           return acc;
         }, { kcal:0, protein:0, carbs:0, fats:0 });
-      }, [day]);
+      }
+      const slotTotals = useMemo(() => {
+        const t = {};
+        slotKeys.forEach(k => {
+          const meals = day[k] || [];
+          const s = meals.reduce((acc, meal) => {
+            const partial = sumIngredients(meal.ingredients || []);
+            acc.kcal += partial.kcal; acc.protein += partial.protein; acc.carbs += partial.carbs; acc.fats += partial.fats;
+            return acc;
+          }, {kcal:0,protein:0,carbs:0,fats:0});
+          t[k]=s;
+        });
+        return t;
+      }, [day, slotKeys]);
 
+      const totals = useMemo(()=> {
+        return Object.values(slotTotals).reduce((a,b)=>({kcal:a.kcal+b.kcal,protein:a.protein+b.protein,carbs:a.carbs+b.carbs,fats:a.fats+b.fats}),{kcal:0,protein:0,carbs:0,fats:0});
+      }, [slotTotals]);
+
+      // ---- Helpers dia
       const getSlotLabel = (k)=> `Refeição ${slotKeys.indexOf(k)+1}`;
       const updateDay = (next)=> setAllDays(prev => ({ ...prev, [currentDayId]: next }));
+
+      // Copia profunda simples
+      const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+
+      // Adicionar refeição
       const addTo = (slotKey, meal)=> {
-        const entry = { mealId: meal.id, name: meal.name, isLocked:false, ingredients: (meal.ingredients||[]).map(x=>({...x, portion:1})) };
+        const baseIngredients = (meal.ingredients||[]).map(x=>({...x, portion:1, included:true}));
+        const entry = {
+          mealId: meal.id, name: meal.name, isLocked:false,
+          ingredients: deepCopy(baseIngredients),
+          originalIngredients: deepCopy(baseIngredients) // para reset
+        };
         updateDay({ ...day, [slotKey]: [...(day[slotKey]||[]), entry] });
+        setUsage(u => ({ ...u, [meal.id]: (u[meal.id]||0)+1 }));
       };
+
+      // Remover/duplicar/refeições
       const removeMeal = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].filter((_,idx)=> idx!==i) });
       const toggleLock = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].map((m,idx)=> idx===i ? ({...m, isLocked:!m.isLocked}) : m) });
+
+      const duplicateMealTo = (fromKey, i, toKey) => {
+        const m = day[fromKey][i];
+        const copy = deepCopy(m);
+        updateDay({ ...day, [toKey]: [...(day[toKey]||[]), copy] });
+      };
+
+      // Ingredientes: porção / incluir-excluir / reset / quick add
       const updateIngredientPortion = (slotKey, i, j, por)=> updateDay({
         ...day,
         [slotKey]: day[slotKey].map((m,idx)=> idx!==i || m.isLocked ? m :
           ({...m, ingredients: m.ingredients.map((ing,k)=> k===j? {...ing, portion:Number(por)} : ing)}))
       });
+
+      const toggleIngredientIncluded = (slotKey, i, j) => updateDay({
+        ...day,
+        [slotKey]: day[slotKey].map((m,idx)=> {
+          if (idx!==i || m.isLocked) return m;
+          const next = m.ingredients.map((ing,k)=> k===j ? ({...ing, included: !(ing.included!==false)}) : ing);
+          return { ...m, ingredients: next };
+        })
+      });
+
+      const resetMealIngredients = (slotKey, i) => updateDay({
+        ...day,
+        [slotKey]: day[slotKey].map((m,idx)=> {
+          if (idx!==i) return m;
+          return { ...m, ingredients: deepCopy(m.originalIngredients||[]), isLocked:false };
+        })
+      });
+
       const removeIngredient = (slotKey,i,j)=> updateDay({
         ...day,
         [slotKey]: day[slotKey].map((m,idx)=> {
           if (idx!==i || m.isLocked) return m;
           const next = m.ingredients.filter((_,k)=> k!==j);
-          return next.length? {...m, ingredients:next} : null;
-        }).filter(Boolean)
+          return next.length? {...m, ingredients:next} : {...m, ingredients:[]};
+        })
       });
 
+      const addQuickIngredient = (slotKey,i,ing) => updateDay({
+        ...day,
+        [slotKey]: day[slotKey].map((m,idx)=> {
+          if (idx!==i || m.isLocked) return m;
+          return { ...m, ingredients: [...m.ingredients, { ...ing, included:true }] };
+        })
+      });
+
+      // Slots
       const addSlot = ()=> {
         if (slotKeys.length>=8) return;
         const key = `slot-${slotKeys.length+1}`;
@@ -308,14 +482,14 @@
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
-      // ===== AUTH (EMAIL+SENHA) =====
+      // ---- AUTH (EMAIL+SENHA) + Autosave (pausa enquanto digita)
       const [session, setSession] = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
       const [syncing, setSyncing] = useState(false);
+      const [typingNumeric, setTypingNumeric] = useState(false);
 
-      // snapshot/debounce para salvar sem piscar
       const lastSnapRef = useRef(null);
       const debounceRef = useRef(null);
 
@@ -326,8 +500,7 @@
           setSession(data.session || null);
           setAuthReady(true);
           const sub = sb.auth.onAuthStateChange((_e, s) => {
-            setSession(s);
-            setAuthReady(true);
+            setSession(s); setAuthReady(true);
           });
           unsub = sub.data.subscription;
         })();
@@ -349,20 +522,12 @@
 
       function snapshot() {
         return JSON.stringify({
-          profile: {
-            ...safeProfile,
-            age: round(safeProfile.age, 2),
-            weight: round(safeProfile.weight, 2),
-            height: round(safeProfile.height, 2),
-            neck: round(safeProfile.neck, 2),
-            waist: round(safeProfile.waist, 2),
-            hip: round(safeProfile.hip, 2),
-            photoUrl: profile.photoUrl || null,
-            photoUpdatedAt: profile.photoUpdatedAt || null,
-          },
+          profile,
           allDays,
           slotKeys,
-          currentDayId
+          currentDayId,
+          favorites: Array.from(favorites),
+          usage
         });
       }
 
@@ -374,7 +539,8 @@
         if (!data) {
           await sb.from('user_state').insert({
             user_id: session.user.id,
-            profile: safeProfile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId
+            profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
+            favorites: Array.from(favorites), usage
           });
           lastSnapRef.current = snapshot();
           setSyncing(false);
@@ -385,11 +551,15 @@
           const d = data.all_days || {};
           const s = Array.isArray(data.slot_keys)? data.slot_keys : INITIAL_SLOT_KEYS;
           const cid = data.current_day_id || INITIAL_DAY_ID;
+          const fav = new Set(Array.isArray(data.favorites)? data.favorites : Array.from(favorites));
+          const u = data.usage || usage;
           setProfile(p);
           setAllDays(Object.keys(d).length? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
           setSlotKeys(s.length? s : INITIAL_SLOT_KEYS);
           setCurrentDayId(cid);
-          lastSnapRef.current = JSON.stringify({ profile:p, allDays:d, slotKeys:s, currentDayId:cid });
+          setFavorites(fav);
+          setUsage(u);
+          lastSnapRef.current = JSON.stringify({ profile:p, allDays:d, slotKeys:s, currentDayId:cid, favorites:Array.from(fav), usage:u });
         } finally { setSyncing(false); }
       }
 
@@ -398,33 +568,30 @@
         setSyncing(true);
         await sb.from('user_state').upsert({
           user_id: session.user.id,
-          profile: { ...safeProfile, photoUrl: profile.photoUrl || null, photoUpdatedAt: profile.photoUpdatedAt || null },
-          all_days: allDays,
-          slot_keys: slotKeys,
-          current_day_id: currentDayId,
+          profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
+          favorites: Array.from(favorites), usage,
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         lastSnapRef.current = snapshot();
         setSyncing(false);
       }
 
-      // carregar
       useEffect(()=>{ if (session) loadCloud(); }, [session]);
 
-      // autosave debounced + diff
       useEffect(() => {
         if (!session) return;
+        if (typingNumeric) return; // pausa autosave enquanto edita números
         const snap = snapshot();
         if (snap === lastSnapRef.current) return;
         clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => { saveCloudNow(); }, 1500);
+        debounceRef.current = setTimeout(() => { saveCloudNow(); }, 1200);
         return () => clearTimeout(debounceRef.current);
-      }, [safeProfile, allDays, slotKeys, currentDayId, profile.photoUrl, profile.photoUpdatedAt, session]);
+      }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric]);
 
-      // ===== FOTO: upload no Storage + salva URL no profile =====
+      // ---- Foto: compressão worker + upload + salvar URL
       function getExt(name) {
         const p = (name || '').split('.');
-        return (p.length > 1 ? p.pop() : 'jpg').toLowerCase();
+        return (p.length > 1 ? p.pop() : 'webp').toLowerCase();
       }
       async function onPhoto(e){
         if (isProfileLocked) return;
@@ -432,13 +599,26 @@
         if (!file) return;
         if (!session?.user?.id) { return alert('Faça login para salvar sua foto.'); }
 
+        const worker = new Worker(workerURL);
+        const compressed = await new Promise((resolve) => {
+          const t = setTimeout(()=> resolve(null), 15000);
+          worker.onmessage = (ev) => {
+            clearTimeout(t);
+            if (ev.data?.ok) resolve(ev.data.blob);
+            else resolve(null);
+            worker.terminate();
+          };
+          worker.postMessage({ file });
+        });
+
+        const blob = compressed || file; // fallback se worker falhar
         const userId = session.user.id;
         const ext = getExt(file.name);
-        const path = `u/${userId}/avatar.${ext}`;
+        const path = `u/${userId}/avatar.${ext === 'jpg' ? 'jpg' : 'webp'}`;
 
         const { error: upErr } = await sb.storage
           .from(AVATAR_BUCKET)
-          .upload(path, file, { cacheControl: '3600', upsert: true });
+          .upload(path, blob, { cacheControl: '3600', upsert: true });
 
         if (upErr) {
           alert('Falha no upload: ' + upErr.message);
@@ -451,34 +631,93 @@
         const next = { ...profile, photoUrl: publicUrl, photoUpdatedAt: Date.now() };
         setProfile(next);
 
-        // salva imediatamente (sem esperar debounce) para persistir a foto
         await sb.from('user_state').upsert({
           user_id: userId,
-          profile: { ...safeProfile, photoUrl: next.photoUrl, photoUpdatedAt: next.photoUpdatedAt },
+          profile: next,
           all_days: allDays,
           slot_keys: slotKeys,
           current_day_id: currentDayId,
+          favorites: Array.from(favorites),
+          usage,
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         lastSnapRef.current = snapshot();
       }
 
-      // ===== UI =====
+      // ---- handlers perfil com pausa de autosave
+      const handleProfileChangeLive = (key, value) => {
+        if (isProfileLocked) return;
+        setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
+        setProfile(p => ({ ...p, [key]: value }));
+      };
+      const handleProfileBlur = (key) => {
+        setTypingNumeric(false);
+        setProfile(p => {
+          if (['sex','activity','goal','photoUrl','unitSystem','photoUpdatedAt'].includes(key)) return p;
+          return { ...p, [key]: normalizeOnBlur(key, p[key]) };
+        });
+      };
+
+      // ---- Favoritos
+      const toggleFavorite = (id) => setFavorites(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+
+      // ---- Exportar/Importar dia
+      const exportDay = () => {
+        const payload = { version:"6.0", day: day, slotKeys };
+        const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `cardapio_${currentDayId}.json`;
+        a.click();
+        setTimeout(()=> URL.revokeObjectURL(a.href), 1500);
+      };
+      const importInputRef = useRef(null);
+      const importDay = (file) => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          try {
+            const data = JSON.parse(fr.result);
+            if (!data?.day) throw new Error('Arquivo inválido');
+            // garante chaves existentes
+            const keys = Array.isArray(data.slotKeys) && data.slotKeys.length ? data.slotKeys : slotKeys;
+            setSlotKeys(keys);
+            updateDay(data.day);
+            alert('Dia importado com sucesso!');
+          } catch(err) {
+            alert('Falha ao importar: ' + (err?.message||''));
+          }
+        };
+        fr.readAsText(file);
+      };
+
+      // ---- UI
       return (
         <div className="min-h-screen">
           <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#0a0a1a]/90 backdrop-blur z-20">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
-                <p className="text-sm text-slate-400">Monte seu dia com porções ajustáveis e metas calculadas (v5.9)</p>
+                <p className="text-sm text-slate-400">v6.0 • slots com totais • toggle/reset de ingredientes • favoritos • ordenação • busca por ingrediente • unidades • exportar/importar • avatar com compressão</p>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">Unidades:</span>
+                  <button
+                    onClick={()=> setProfile(p => p.unitSystem==='metric' ? toImperial(p) : toMetric(p))}
+                    className="px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40">
+                    {isMetric ? 'cm/kg → in/lb' : 'in/lb → cm/kg'}
+                  </button>
+                </div>
                 {authReady && (!session ? (
                   <>
                     <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com"
-                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-56"/>
+                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-44"/>
                     <input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} placeholder="senha"
-                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-40"/>
+                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-36"/>
                     <button onClick={signInPassword}
                             className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
                     <button onClick={signUpPassword}
@@ -503,13 +742,14 @@
                             className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
                   </>
                 ))}
-                <a href="#biblioteca" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
-                <a href="#meu-dia" className="hidden md:block text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
+                <a href="#biblioteca" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
+                <a href="#meu-dia" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
               </div>
             </div>
           </header>
 
           <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* COLUNA PERFIL */}
             <div className="lg:col-span-1 flex flex-col gap-6">
               <Section
                 title="Seu Perfil"
@@ -532,7 +772,7 @@
                     />
                     <input id="photo" type="file" accept="image/*" onChange={onPhoto} className="hidden" disabled={isProfileLocked}/>
                   </label>
-                  <p className="text-xs text-slate-400 mt-2">{isProfileLocked?'Informações fixadas':'Clique para alterar foto'}</p>
+                  <p className="text-xs text-slate-400 mt-2">{isProfileLocked?'Informações fixadas':'Toque para alterar foto (com compactação)'}</p>
                 </div>
 
                 {!minProfile && (
@@ -551,42 +791,42 @@
                         <span>Idade</span>
                         <input type="number" value={profile.age} disabled={isProfileLocked}
                                onChange={(e)=> handleProfileChangeLive('age', e.target.value)} onBlur={()=> handleProfileBlur('age')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                       </label>
                       <label className="flex flex-col gap-1">
-                        <span>Peso (kg)</span>
+                        <span>Peso ({unit.weight})</span>
                         <input type="number" value={profile.weight} disabled={isProfileLocked}
                                onChange={(e)=> handleProfileChangeLive('weight', e.target.value)} onBlur={()=> handleProfileBlur('weight')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                       </label>
                       <label className="flex flex-col gap-1">
-                        <span>Altura (cm)</span>
+                        <span>Altura ({unit.length})</span>
                         <input type="number" value={profile.height} disabled={isProfileLocked}
                                onChange={(e)=> handleProfileChangeLive('height', e.target.value)} onBlur={()=> handleProfileBlur('height')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                       </label>
                     </div>
 
                     <span className="text-slate-300 font-semibold text-sm block mb-3">Medidas (p/ %Gordura)</span>
                     <div className="grid grid-cols-2 gap-3 text-sm border-b border-slate-700 pb-4 mb-4">
                       <label className="flex flex-col gap-1">
-                        <span>Pescoço (cm)</span>
+                        <span>Pescoço ({unit.length})</span>
                         <input type="number" value={profile.neck} disabled={isProfileLocked}
                                onChange={(e)=> handleProfileChangeLive('neck', e.target.value)} onBlur={()=> handleProfileBlur('neck')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                       </label>
                       <label className="flex flex-col gap-1">
-                        <span>Cintura (cm)</span>
+                        <span>Cintura ({unit.length})</span>
                         <input type="number" value={profile.waist} disabled={isProfileLocked}
                                onChange={(e)=> handleProfileChangeLive('waist', e.target.value)} onBlur={()=> handleProfileBlur('waist')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                       </label>
                       {profile.sex==='F' && (
                         <label className="flex flex-col gap-1 col-span-2">
-                          <span>Quadril (cm)</span>
+                          <span>Quadril ({unit.length})</span>
                           <input type="number" value={profile.hip} disabled={isProfileLocked}
                                  onChange={(e)=> handleProfileChangeLive('hip', e.target.value)} onBlur={()=> handleProfileBlur('hip')}
-                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2"/>
+                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
                         </label>
                       )}
                     </div>
@@ -633,7 +873,7 @@
                     <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-700">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-slate-300 font-semibold">Composição Corporal (US Navy)</span>
-                        <span className="text-xs text-slate-500">auto • cm</span>
+                        <span className="text-xs text-slate-500">auto • {isMetric?'cm':'in'}</span>
                       </div>
                       {body.bf == null ? (
                         <div className="text-xs text-slate-500">Preencha altura, pescoço, cintura {profile.sex==='F' ? 'e quadril ' : ''}para estimar a % de gordura.</div>
@@ -670,43 +910,68 @@
               </Section>
             </div>
 
+            {/* COLUNA BIBLIOTECA + DIA */}
             <div className="lg:col-span-2 grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* BIBLIOTECA */}
               <Section
                 title="Biblioteca de Refeições"
                 right={
                   <div className="flex items-center gap-2 flex-wrap justify-end">
                     <input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Buscar..."
-                           className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-48"/>
+                           className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-40"/>
+                    <label className="text-xs flex items-center gap-1 text-slate-400">
+                      <input type="checkbox" checked={searchInIngredients} onChange={e=> setSearchInIngredients(e.target.checked)} />
+                      buscar em ingredientes
+                    </label>
                     <select value={selectedBlock} onChange={(e)=> setSelectedBlock(e.target.value)}
-                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                            className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
                       <option value="all">Todos</option>
                       <option value="250">250</option>
                       <option value="350">350</option>
                       <option value="500">500</option>
                       <option value="750">750</option>
                     </select>
+                    <select value={orderBy} onChange={(e)=> setOrderBy(e.target.value)}
+                            className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
+                      <option value="relevance">Relevância</option>
+                      <option value="kcal-asc">kcal ↑</option>
+                      <option value="kcal-desc">kcal ↓</option>
+                      <option value="protein">Proteína ↓</option>
+                      <option value="most-used">Mais usadas</option>
+                    </select>
+                    <label className="text-xs flex items-center gap-1 text-slate-400">
+                      <input type="checkbox" checked={onlyFavs} onChange={e=> setOnlyFavs(e.target.checked)} />
+                      favoritos
+                    </label>
+                    <button onClick={refreshLibrary}
+                            className="text-xs px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Atualizar</button>
                     <MinBtn on={minLib} toggle={()=> setMinLib(v=>!v)}/>
                   </div>
                 }>
                 {!minLib && (
                   <div id="biblioteca" className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
-                    {filteredMeals.map(m => (
-                      <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-semibold text-slate-100">{m.name}</div>
+                    {LIB_WITH_TOTALS.map(m => (
+                      <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-100 truncate flex items-center gap-2">
+                              <button onClick={()=> toggleFavorite(m.id)} title={favorites.has(m.id)?'Remover dos favoritos':'Favoritar'} className="text-amber-300">
+                                {favorites.has(m.id) ? '⭐' : '☆'}
+                              </button>
+                              <span className="truncate">{m.name}</span>
+                            </div>
                             <div className="text-sm text-slate-400">
                               {round(m.kcal)} kcal • P {round(m.protein)}g • C {round(m.carbs)}g • G {round(m.fats)}g
                             </div>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">{m.block} kcal</span>
+                          <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">{m.block} kcal</span>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-2 meal-tags flex flex-wrap gap-2">
                           {(m.tags||[]).map(t => (
-                            <span key={t} className="text-xs px-2 py-1 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
+                            <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
                           ))}
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           {slotKeys.map(k => (
                             <button key={k} onClick={()=> addTo(k, m)}
                                     className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">
@@ -716,15 +981,16 @@
                         </div>
                       </div>
                     ))}
-                    {filteredMeals.length===0 && (
+                    {LIB_WITH_TOTALS.length===0 && (
                       <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                        Nenhuma refeição encontrada. Ajuste filtros.
+                        Nenhuma refeição encontrada. Ajuste filtros/busca.
                       </div>
                     )}
                   </div>
                 )}
               </Section>
 
+              {/* MEU DIA */}
               <Section
                 title="Meu Dia"
                 right={
@@ -735,6 +1001,9 @@
                     </select>
                     <button onClick={duplicateCurrentDay} className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40">Duplicar</button>
                     <button onClick={resetDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40">Resetar</button>
+                    <button onClick={exportDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Exportar Dia</button>
+                    <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files[0] && importDay(e.target.files[0])}/>
+                    <button onClick={()=> importInputRef.current?.click()} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Importar Dia</button>
                     <button onClick={addSlot} disabled={slotKeys.length>=8}
                             className={`text-sm px-3 py-1 rounded border ${slotKeys.length>=8?'border-slate-700 text-slate-600 cursor-not-allowed':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
                       + Refeição
@@ -745,9 +1014,14 @@
                 {!minDay && (
                   <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
                     {slotKeys.map(key => (
-                      <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                      <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
                         <div className="flex justify-between items-center mb-2">
-                          <div className="font-semibold text-slate-100">{getSlotLabel(key)}</div>
+                          <div className="font-semibold text-slate-100 flex items-center gap-3">
+                            <span>{getSlotLabel(key)}</span>
+                            <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
+                              {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
+                            </span>
+                          </div>
                           {slotKeys.length>1 && (
                             <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">
                               Remover Slot
@@ -761,56 +1035,93 @@
                           </div>
                         ) : (
                           <ul className="space-y-3">
-                            {day[key].map((meal, i) => (
-                              <li key={i} className={`p-3 border rounded-xl ${meal.isLocked?'border-emerald-500/50 bg-emerald-900/10':'border-slate-700 bg-slate-900/50'}`}>
-                                <div className="flex justify-between items-start mb-3">
-                                  <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
-                                    {meal.name}
-                                    {meal.isLocked && (
-                                      <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
-                                      </svg>
-                                    )}
-                                  </div>
-                                  <div className="flex gap-2 items-center">
-                                    <button onClick={()=> toggleLock(key, i)}
-                                            className={`text-xs px-2 py-0.5 rounded border ${meal.isLocked?'border-red-500 text-red-300 bg-red-900/20':'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
-                                      {meal.isLocked?'Editar':'Feita'}
-                                    </button>
-                                    <button onClick={()=> removeMeal(key, i)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10">
-                                      Remover
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
-                                <ul className="space-y-2">
-                                  {(meal.ingredients||[]).map((ing, j) => {
-                                    const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
-                                    const base=+ing.baseKcal || (p*4+c*4+f*9);
-                                    const por=+ing.portion||1;
-                                    const kcal = base*por;
-                                    const disabled = meal.isLocked;
-                                    return (
-                                      <li key={j} className={`flex justify-between items-center text-xs pl-3 py-1 border-l-2 ${disabled?'border-emerald-500/50':'border-slate-700 hover:bg-slate-800/50'}`}>
-                                        <div className="text-slate-300 flex-1 truncate">{ing.name} (<strong className="text-slate-200">{round(kcal)} kcal</strong>)</div>
-                                        <div className="flex items-center gap-2">
-                                          <select value={ing.portion} disabled={disabled}
-                                                  onChange={(e)=> updateIngredientPortion(key, i, j, e.target.value)}
-                                                  className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${disabled?'opacity-50 cursor-not-allowed border-slate-700':'border-slate-600'}`}>
-                                            {[0.5,1,1.5,2].map(v => <option key={v} value={v}>{v}x</option>)}
-                                          </select>
-                                          <button onClick={()=> removeIngredient(key, i, j)} disabled={disabled}
-                                                  className={`text-xs p-1 rounded ${disabled?'text-slate-600 cursor-not-allowed':'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`}>
-                                            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                                          </button>
+                            {day[key].map((meal, i) => {
+                              const menuRef = useRef(null);
+                              const [openMenu, setOpenMenu] = useState(false);
+                              useEffect(() => {
+                                const onDoc = (ev)=> { if (!menuRef.current?.contains(ev.target)) setOpenMenu(false); };
+                                document.addEventListener('click', onDoc);
+                                return ()=> document.removeEventListener('click', onDoc);
+                              }, []);
+                              const otherSlots = slotKeys.filter(sk => sk!==key);
+                              return (
+                                <li key={i} className={`p-3 border rounded-xl ${meal.isLocked?'border-emerald-500/50 bg-emerald-900/10':'border-slate-700 bg-slate-900/50'}`}>
+                                  <div className="flex justify-between items-start mb-3">
+                                    <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
+                                      {meal.name}
+                                      {meal.isLocked && (
+                                        <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                      <button onClick={()=> resetMealIngredients(key,i)}
+                                              className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">
+                                        Resetar ingredientes
+                                      </button>
+                                      <div ref={menuRef} className={`menu ${openMenu?'open':''}`}>
+                                        <button onClick={()=> setOpenMenu(v=>!v)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">⋯</button>
+                                        <div className="menu-content rounded">
+                                          {otherSlots.map(tk => (
+                                            <div key={tk} className="menu-item" onClick={()=> { duplicateMealTo(key,i,tk); setOpenMenu(false); }}>
+                                              Duplicar para {getSlotLabel(tk)}
+                                            </div>
+                                          ))}
                                         </div>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </li>
-                            ))}
+                                      </div>
+                                      <button onClick={()=> toggleLock(key, i)}
+                                              className={`text-xs px-2 py-0.5 rounded border ${meal.isLocked?'border-red-500 text-red-300 bg-red-900/20':'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
+                                        {meal.isLocked?'Editar':'Feita'}
+                                      </button>
+                                      <button onClick={()=> removeMeal(key, i)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10">
+                                        Remover
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
+                                  <ul className="space-y-2">
+                                    {(meal.ingredients||[]).map((ing, j) => {
+                                      const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
+                                      const base=+ing.baseKcal || (p*4+c*4+f*9);
+                                      const por=+ing.portion||1;
+                                      const kcal = base*por;
+                                      const disabled = meal.isLocked;
+                                      const included = ing.included !== false;
+                                      return (
+                                        <li key={j} className={`flex flex-wrap md:flex-nowrap gap-2 justify-between items-center text-xs pl-3 py-1 border-l-2 ${included?'border-emerald-500/60':'border-slate-700 bg-slate-800/40 line-through opacity-70'}`}>
+                                          <div className="text-slate-300 flex-1 min-w-0 truncate">
+                                            {ing.name} (<strong className="text-slate-200">{round(kcal)} kcal</strong>)
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <select value={ing.portion} disabled={disabled}
+                                                    onChange={(e)=> updateIngredientPortion(key, i, j, e.target.value)}
+                                                    className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${disabled?'opacity-50 cursor-not-allowed border-slate-700':'border-slate-600'}`}>
+                                              {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
+                                            </select>
+                                            <button onClick={()=> toggleIngredientIncluded(key, i, j)} disabled={disabled}
+                                                    className={`text-xs px-2 py-0.5 rounded border ${included?'border-yellow-600 text-yellow-300 hover:bg-yellow-900/20':'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'}`}>
+                                              {included?'Excluir':'Incluir'}
+                                            </button>
+                                            <button onClick={()=> removeIngredient(key, i, j)} disabled={disabled}
+                                                    className={`text-xs p-1 rounded ${disabled?'text-slate-600 cursor-not-allowed':'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`} title="Remover ingrediente">
+                                              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+                                            </button>
+                                          </div>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+
+                                  {/* + Ingrediente rápido */}
+                                  <QuickAdd
+                                    onAdd={(ing)=> addQuickIngredient(key, i, ing)}
+                                    disabled={meal.isLocked}
+                                  />
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                       </div>
@@ -829,13 +1140,13 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v5.9 — JSON externo + login por e-mail/senha + autosave com debounce + cálculo de %Gordura (US Navy) + avatar persistente em Storage.
+            v6.0 — Biblioteca com favoritos/ordenação/busca em ingredientes • slots com totais • duplicar refeição • toggle/reset ingredientes • ingrediente rápido • unidades cm/kg↔in/lb • exportar/importar • avatar com compressão (Web Worker) • cache do JSON • autosave mais esperto.
           </footer>
         </div>
       );
     }
 
-    // ===== UI Helpers =====
+    // ===== Componentes auxiliares =====
     const MinBtn = ({ on, toggle }) => (
       <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -868,6 +1179,59 @@
         </div>
       );
     };
+
+    // Formulário de ingrediente rápido
+    function QuickAdd({ onAdd, disabled }) {
+      const [name, setName] = useState("");
+      const [kcal, setKcal] = useState("");
+      const [p, setP] = useState("");
+      const [c, setC] = useState("");
+      const [f, setF] = useState("");
+      const [portion, setPortion] = useState("1");
+
+      const submit = () => {
+        if (!name.trim()) return alert('Informe o nome.');
+        const kcalN = +kcal;
+        const hasMacros = p || c || f;
+        const baseKcal = hasMacros ? ( (+p||0)*4 + (+c||0)*4 + (+f||0)*9 ) : (Number.isFinite(kcalN)? kcalN : 0);
+        const ing = {
+          name: name.trim(),
+          baseKcal: baseKcal,
+          protein: +p || 0,
+          carbs: +c || 0,
+          fats: +f || 0,
+          portion: +portion || 1
+        };
+        onAdd(ing);
+        setName(""); setKcal(""); setP(""); setC(""); setF(""); setPortion("1");
+      };
+
+      return (
+        <div className="mt-3 p-3 rounded-lg border border-slate-700 bg-slate-900/60">
+          <div className="text-xs text-slate-400 mb-2 font-medium">+ Ingrediente rápido</div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome"
+                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs md:col-span-2"/>
+            <input value={kcal} onChange={e=>setKcal(e.target.value)} placeholder="kcal (se não P/C/G)"
+                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
+            <input value={p} onChange={e=>setP(e.target.value)} placeholder="P"
+                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
+            <input value={c} onChange={e=>setC(e.target.value)} placeholder="C"
+                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
+            <input value={f} onChange={e=>setF(e.target.value)} placeholder="G"
+                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
+            <select value={portion} onChange={e=>setPortion(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs">
+              {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
+            </select>
+            <button onClick={submit} disabled={disabled}
+                    className={`text-xs px-2 py-1 rounded border ${disabled?'border-slate-700 text-slate-600':'border-emerald-500 text-emerald-300 hover:bg-emerald-500/10'}`}>
+              Adicionar
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
