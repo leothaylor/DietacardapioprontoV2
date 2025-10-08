@@ -35,17 +35,14 @@
     const { useState, useMemo, useEffect, useRef } = React;
 
     // ===================================================================
-    // ⚠️ 🟢 ATUALIZAÇÃO DE SEGURANÇA (v6.1)
-    // SUBSTITUA AQUI COM SEUS DADOS REAIS DO PAINEL SUPABASE.
-    // DICA: Evite comitar chaves reais em repositórios públicos como o GitHub.
+    // ⚠️ 🟢 ATUALIZAÇÃO DE SEGURANÇA (v6.1) - SUBSTITUA ESTAS CHAVES
     // ===================================================================
     const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // EX: 'https://grnwskvvbglclnijbgdq.supabase.co'
     const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'; // Sua chave 'anon public'
     
-    // Se as chaves NÃO forem substituídas, a aplicação alertará o usuário.
+    // Alerta de segurança se as chaves não forem substituídas
     if (SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON_KEY.includes('YOUR_')) {
       alert("⚠️ ERRO DE CONFIGURAÇÃO: Por favor, substitua 'YOUR_SUPABASE_URL' e 'YOUR_ANON_KEY' no código. O app não funcionará sem as credenciais Supabase.");
-      // Sobrescreve a função de criação de cliente para evitar erros de runtime
       window.supabase = { createClient: () => ({ auth: { getSession: () => ({ data: {} }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }), signInWithPassword: () => ({ error: { message: 'Configuração Incompleta.' } }), signUp: () => ({ error: { message: 'Configuração Incompleta.' } }), signOut: () => {} } }) };
     }
     
@@ -57,8 +54,6 @@
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
     const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
     const toNum = v => Number.isFinite(+v) ? +v : 0;
-    // Removendo log10 duplicado
-    // const log10 = x => Math.log(x)/Math.LN10; 
 
     // Unidades (mantemos funções caso use no futuro)
     const cmToIn = cm => cm/2.54;
@@ -66,7 +61,7 @@
     const kgToLb = kg => kg*2.2046226218;
     const lbToKg = lb => lb/2.2046226218;
 
-    // ===== CÁLCULOS =====
+    // ===== CÁLCULOS (Mantido) =====
     function calcBMR({ sex, weight, height, age }) {
       const s = sex === "F" ? -161 : 5;
       return 10 * weight + 6.25 * height - 5 * age + s;
@@ -90,20 +85,14 @@
       const carbs = kcalC / KCAL_PER_G.carbs;
       return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
     }
-
-    // ===== BODYFAT (US NAVY • usando cm diretamente) =====
-    // Homens:  %G = 86.010*log10(Cintura - Pescoço) - 70.041*log10(Altura) + 36.76
-    // Mulheres:%G = 163.205*log10(Cintura + Quadril - Pescoço) - 97.684*log10(Altura) - 78.387
-    // Todas as medidas em CENTÍMETROS. Retorna 1 casa decimal.
     function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
 
-      // precisa ter dados válidos:
       if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) {
         return { bf:null, fm:null, lm:null };
       }
 
-      const log10 = (x) => Math.log(x) / Math.LN10; // 🟢 Movendo o utilitário localmente
+      const log10 = (x) => Math.log(x) / Math.LN10;
 
       let bf;
       if (sex === 'F') {
@@ -116,18 +105,16 @@
         bf = 86.010 * log10(x) - 70.041 * log10(h) + 36.76;
       }
 
-      // limitar a faixa e calcular massas
       bf = Math.min(60, Math.max(3, bf));
       const wt = +weight || 0;
       const fm = wt * (bf / 100);
       const lm = wt - fm;
 
-      // 1 casa decimal conforme você espera na UI
       const round1 = (v) => Math.round(v * 10) / 10;
       return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
     }
 
-    // ===== STATE KEYS (Não alterado) =====
+    // ===== STATE KEYS / INPUT RULES / LOCAL STORAGE / DEFAULTS (Mantidos) =====
     const NS = "cardapio_v6_0";
     const PROFILE_STORAGE_KEY = `${NS}_profile`;
     const ALL_DAYS_STORAGE_KEY = `${NS}_all_days`;
@@ -139,7 +126,6 @@
     const INITIAL_DAY_ID = 'day-1';
     const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
 
-    // ===== INPUT RULES (Não alterado) =====
     const INPUT_RANGES = {
       age: { min: 10, max: 120, step: 1 },
       weight: { min: 30, max: 300, step: 0.5 },
@@ -157,8 +143,6 @@
       }
       return n;
     }
-
-    // ===== LOCAL STORAGE (Não alterado) =====
     function loadState(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -169,7 +153,6 @@
     function saveState(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
     }
-    // ===== LOCAL STORAGE (com namespace por usuário) =====
     function nsKey(base, uid) {
       return `${base}__${uid || 'anon'}`;
     }
@@ -179,8 +162,6 @@
     function saveStateNS(base, uid, value) {
       return saveState(nsKey(base, uid), value);
     }
-
-    // ===== DEFAULTS (Não alterado) =====
     const DEFAULT_PROFILE = {
       sex: "M", age: 33, weight: 73, height: 170,
       activity: "moderate", goal: "recomp",
@@ -194,8 +175,12 @@
       return { ...base, meta: { waterMl: 0, sleepH: 0 } };
     };
 
-    // ===== JSON EXTERNO (com cache simples) =====
-    const JSON_URL = new URL('alimentos.json', location.href);
+    // ===================================================================
+    // 🟢 LÓGICA DE BUSCA DA BIBLIOTECA: AGORA PRIORIZA SUPABASE
+    // ===================================================================
+    
+    // Funções auxiliares para o fallback local
+    const JSON_URL = new URL('alimentos.json', location.href); 
     function inferBlockByKcal(kcal) {
       const k = Number(kcal) || 0;
       const within = (t) => Math.abs(k - t) <= 50;
@@ -205,7 +190,8 @@
       if (within(750)) return "750";
       return "250";
     }
-    function normalizeExternalItems(data) {
+
+    function normalizeLocalItems(data) {
       if (!data || !Array.isArray(data.items)) return [];
       return data.items.map((it, i) => {
         const protein = Number(it.protein) || 0;
@@ -224,23 +210,77 @@
         };
       });
     }
-    async function fetchExternalMealsSafe(force=false) {
+
+    async function fetchLocalJsonFallback(force=false) {
       try {
         const cache = loadState(JSON_CACHE_KEY, null);
         if (!force && cache?.ts && cache?.items) {
+          console.log("Biblioteca carregada do cache local (fallback).");
           return cache.items;
         }
         const u = new URL(JSON_URL); u.searchParams.set('_', Date.now());
         const res = await fetch(u, { cache: 'no-store' });
         if (!res.ok) throw new Error();
         const data = await res.json();
-        const items = normalizeExternalItems(data);
+        const items = normalizeLocalItems(data);
         saveState(JSON_CACHE_KEY, { ts: Date.now(), items });
+        console.log("Biblioteca carregada do arquivo JSON local (fallback).");
         return items;
-      } catch { return loadState(JSON_CACHE_KEY, {items:[]}).items || []; }
+      } catch { 
+        return loadState(JSON_CACHE_KEY, {items:[]}).items || []; 
+      }
     }
 
-    // ===== Web Worker de compressão (corte 1:1 @ 512px -> WEBP/JPEG) - (Não alterado) =====
+    // Nova função de busca via Supabase (Prioritária)
+    async function fetchExternalMealsSafe() {
+      // Se as chaves não foram substituídas, usamos apenas o fallback local
+      if (SUPABASE_URL.includes('YOUR_')) {
+        console.warn("Chaves Supabase não configuradas. Usando apenas o arquivo local.");
+        return await fetchLocalJsonFallback(true);
+      }
+
+      try {
+        // ⚠️ NOME DA TABELA AQUI: Ajuste se você usou outro nome
+        const { data, error } = await sb
+          .from('refeicoes_biblioteca')
+          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags')
+          .order('nome', { ascending: true });
+
+        if (error) {
+          console.error("Erro ao carregar do Supabase. Tentando fallback local:", error);
+          return await fetchLocalJsonFallback(true);
+        }
+
+        if (!data || data.length === 0) {
+          console.warn("Nenhum dado encontrado no Supabase. Tentando fallback local.");
+          return await fetchLocalJsonFallback(true);
+        }
+
+        // Normalização dos dados do Supabase (Ajuste para campos em minúsculo)
+        return data.map(it => {
+          const protein = Number(it.proteina) || 0;
+          const carbs   = Number(it.carboidrato) || 0;
+          const fats    = Number(it.gordura) || 0;
+          const kcal    = Number(it.kcal)    || (protein*4 + carbs*4 + fats*9);
+          const block   = String(it.bloco || inferBlockByKcal(kcal)).trim();
+
+          return {
+            id: it.id || `db_${it.nome}`,
+            name: it.nome || 'Item do DB',
+            block,
+            tags: Array.isArray(it.tags) ? it.tags : [],
+            ingredients: [{ name: it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
+          };
+        });
+
+      } catch (e) {
+        console.error("Exceção grave na busca Supabase. Tentando fallback local:", e);
+        return await fetchLocalJsonFallback(true);
+      }
+    }
+
+
+    // ===== Web Worker de compressão (corte 1:1 @ 512px -> WEBP/JPEG) (Mantido) =====
     const workerSrc = `
       self.onmessage = async (e) => {
         const { file } = e.data;
@@ -264,16 +304,15 @@
     `;
     const workerURL = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
 
-    // ===== APP (A lógica do App permanece inalterada, pois já estava bem estruturada) =====
+    // ===== APP (Lógica do Componente Principal - Mantida) =====
     function App() {
-      // ---- Estado base (namespaced por usuário)
-      const uidRef = useRef('anon');
+      // [Bloco de Estado e Efeitos React mantido inalterado]
 
+      const uidRef = useRef('anon');
       const [profile, setProfile] = useState(() =>
         loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE)
       );
       const [isProfileLocked, setIsProfileLocked] = useState(false);
-
       const [slotKeys, setSlotKeys] = useState(() => {
         const k = loadStateNS(SLOTS_STORAGE_KEY, uidRef.current, INITIAL_SLOT_KEYS);
         return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
@@ -287,14 +326,11 @@
         return d;
       });
       const day = allDays[currentDayId] || getInitialDayState(slotKeys);
-
-      // Favoritos globais (não namespaced)
       const [favorites, setFavorites] = useState(() =>
         new Set(loadState(FAVORITES_STORAGE_KEY, []))
       );
-
       const [usage, setUsage] = useState(() =>
-        loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {})   // {recipeId: count}
+        loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {})
       );
 
       useEffect(()=> saveStateNS(PROFILE_STORAGE_KEY, uidRef.current, profile), [profile]);
@@ -304,22 +340,19 @@
       useEffect(()=> saveState(FAVORITES_STORAGE_KEY, Array.from(favorites)), [favorites]);
       useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
 
-      // ---- AUTH + Autosave protegido
       const [session, setSession] = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
       const [syncing, setSyncing] = useState(false);
       const [typingNumeric, setTypingNumeric] = useState(false);
-
-      const [hydrated, setHydrated] = useState(false); // evita sobrescrever a nuvem antes do load
+      const [hydrated, setHydrated] = useState(false); 
       const lastSnapRef = useRef(null);
       const debounceRef = useRef(null);
 
       useEffect(() => {
         let unsub = null;
         (async () => {
-          // 🟢 Adicionado verificação de stub para evitar erro de runtime se as chaves não forem substituídas
           if (!window.supabase || SUPABASE_URL.includes('YOUR_')) { setAuthReady(true); return; } 
 
           const { data } = await sb.auth.getSession();
@@ -333,14 +366,12 @@
         return () => unsub?.unsubscribe();
       }, []);
 
-      // Quando a sessão muda, apontamos para o namespace do novo usuário e recarregamos o estado local
       useEffect(() => {
         const uid = session?.user?.id || 'anon';
         if (uidRef.current === uid) return;
         uidRef.current = uid;
         setHydrated(false);
 
-        // Recarrega do storage namespaced
         setProfile(loadStateNS(PROFILE_STORAGE_KEY, uid, DEFAULT_PROFILE));
         const k = loadStateNS(SLOTS_STORAGE_KEY, uid, INITIAL_SLOT_KEYS);
         setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
@@ -349,28 +380,25 @@
         setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
 
         setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
-        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, []))); // globais
+        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, []))); 
         setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
       }, [session]);
 
-      // ---- Biblioteca (com cache)
       const [externalMeals, setExternalMeals] = useState([]);
       useEffect(()=>{ fetchExternalMealsSafe(false).then(setExternalMeals); }, []);
       const refreshLibrary = async ()=> setExternalMeals(await fetchExternalMealsSafe(true));
 
-      // ---- Filtros biblioteca
       const [search, setSearch] = useState("");
       const [searchInIngredients, setSearchInIngredients] = useState(true);
       const [selectedBlock, setSelectedBlock] = useState("all");
       const [activeTags, setActiveTags] = useState([]);
       const [onlyFavs, setOnlyFavs] = useState(false);
-      const [orderBy, setOrderBy] = useState("relevance"); // kcal-asc, kcal-desc, protein, most-used
+      const [orderBy, setOrderBy] = useState("relevance"); 
       const [minProfile, setMinProfile] = useState(false);
       const [minMacros, setMinMacros] = useState(false);
       const [minLib, setMinLib] = useState(false);
       const [minDay, setMinDay] = useState(false);
 
-      // ---- Unidades: fixo em MÉTRICO
       const isMetric = true;
       const unit = { weight: "kg", length: "cm" };
 
@@ -387,14 +415,12 @@
         };
       }, [profile]);
 
-      // ---- Metas
       const bmr = useMemo(()=> calcBMR(safeProfile), [safeProfile]);
       const tdee = useMemo(()=> calcTDEE(bmr, safeProfile.activity), [bmr, safeProfile.activity]);
       const targetCalories = useMemo(()=> round(adjustForGoal(tdee, safeProfile.goal)), [tdee, safeProfile.goal]);
       const macroTargets = useMemo(()=> deriveMacroTargets({ weight: safeProfile.weight, calories: targetCalories }), [safeProfile.weight, targetCalories]);
       const body = useMemo(()=> calcBodyFat(safeProfile), [safeProfile.sex, safeProfile.height, safeProfile.neck, safeProfile.waist, safeProfile.hip, safeProfile.weight]);
 
-      // ---- Biblioteca com totais + ordenação + favoritos + busca em ingrediente
       const LIB_WITH_TOTALS = useMemo(()=> {
         const enriched = externalMeals.map(m => {
           const totals = (m.ingredients||[]).reduce((a, e) => {
@@ -423,7 +449,6 @@
         return list;
       }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
 
-      // ---- Totais do dia e por slot
       function sumIngredients(list) {
         return list.reduce((acc, ing) => {
           if (ing.included === false) return acc;
@@ -452,11 +477,8 @@
         return Object.values(slotTotals).reduce((a,b)=>({kcal:a.kcal+b.kcal,protein:a.protein+b.protein,carbs:a.carbs+b.carbs,fats:a.fats+b.fats}),{kcal:0,protein:0,carbs:0,fats:0});
       }, [slotTotals]);
 
-      // ---- Helpers dia
       const getSlotLabel = (k)=> `Refeição ${slotKeys.indexOf(k)+1}`;
       const updateDay = (next)=> setAllDays(prev => ({ ...prev, [currentDayId]: next }));
-
-      // Meta do dia: água (ml) e sono (h)
       const getMeta = (d) => ({ waterMl: 0, sleepH: 0, ...(d?.meta || {}) });
 
       const addWater = (ml) => {
@@ -475,11 +497,8 @@
         const next = { ...day, meta: { ...meta, sleepH: val } };
         updateDay(next);
       };
-
-      // Copia profunda simples
       const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
-      // Adicionar refeição
       const addTo = (slotKey, meal)=> {
         const baseIngredients = (meal.ingredients||[]).map(x=>({...x, portion:1, included:true}));
         const entry = {
@@ -491,7 +510,6 @@
         setUsage(u => ({ ...u, [meal.id]: (u[meal.id]||0)+1 }));
       };
 
-      // Remover/duplicar/refeições
       const removeMeal = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].filter((_,idx)=> idx!==i) });
       const toggleLock = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].map((m,idx)=> idx===i ? ({...m, isLocked:!m.isLocked}) : m) });
 
@@ -501,7 +519,6 @@
         updateDay({ ...day, [toKey]: [...(day[toKey]||[]), copy] });
       };
 
-      // Ingredientes
       const updateIngredientPortion = (slotKey, i, j, por)=> updateDay({
         ...day,
         [slotKey]: day[slotKey].map((m,idx)=> idx!==i || m.isLocked ? m :
@@ -542,7 +559,6 @@
         })
       });
 
-      // Slots
       const addSlot = ()=> {
         if (slotKeys.length>=8) return;
         const key = `slot-${slotKeys.length+1}`;
@@ -576,7 +592,6 @@
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
-      // ---- Funções de AUTH (Não alterado, mas precisam de chaves Supabase válidas)
       async function signUpPassword() {
         if (!email || !password) return alert('Preencha e-mail e senha.');
         const { error } = await sb.auth.signUp({ email, password });
@@ -590,7 +605,6 @@
       }
       async function signOut() {
         await sb.auth.signOut();
-        // apenas troca para anon (não apagamos caches locais do usuário logado)
         uidRef.current = 'anon';
         const anonProfile = loadStateNS(PROFILE_STORAGE_KEY, 'anon', DEFAULT_PROFILE);
         setProfile({ ...anonProfile, photoUrl: DEFAULT_PROFILE.photoUrl, photoUpdatedAt: null });
@@ -615,14 +629,12 @@
         });
       }
 
-      // ---- Funções de Cloud Sync (Não alterado)
       async function loadCloud() {
         if (!session) return;
         setSyncing(true);
         const { data, error } = await sb.from('user_state').select('*').eq('user_id', session.user.id).maybeSingle();
         if (error) { setSyncing(false); setHydrated(true); return; }
         if (!data) {
-          // cria registro inicial
           await sb.from('user_state').insert({
             user_id: session.user.id,
             profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
@@ -666,8 +678,8 @@
       useEffect(()=>{ if (session) loadCloud(); }, [session]);
 
       useEffect(() => {
-        if (!session || !hydrated) return;  // <- só salva após carregar da nuvem
-        if (typingNumeric) return;          // pausa autosave enquanto edita números
+        if (!session || !hydrated) return;
+        if (typingNumeric) return;
         const snap = snapshot();
         if (snap === lastSnapRef.current) return;
         clearTimeout(debounceRef.current);
@@ -675,7 +687,6 @@
         return () => clearTimeout(debounceRef.current);
       }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric, hydrated]);
 
-      // ---- Foto: compressão worker + upload + salvar URL (Não alterado)
       function getExt(name) {
         const p = (name || '').split('.');
         return (p.length > 1 ? p.pop() : 'webp').toLowerCase();
@@ -698,7 +709,7 @@
           worker.postMessage({ file });
         });
 
-        const blob = compressed || file; // fallback se worker falhar
+        const blob = compressed || file;
         const userId = session.user.id;
         const ext = getExt(file.name);
         const path = `u/${userId}/avatar.${ext === 'jpg' ? 'jpg' : 'webp'}`;
@@ -731,7 +742,6 @@
         lastSnapRef.current = snapshot();
       }
 
-      // ---- handlers perfil com pausa de autosave (Não alterado)
       const handleProfileChangeLive = (key, value) => {
         if (isProfileLocked) return;
         setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
@@ -745,14 +755,12 @@
         });
       };
 
-      // ---- Favoritos (Não alterado)
       const toggleFavorite = (id) => setFavorites(prev => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id); else next.add(id);
         return next;
       });
 
-      // ---- Exportar/Importar dia (Não alterado)
       const exportDay = () => {
         const payload = { version:"6.0", day: day, slotKeys };
         const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
@@ -780,7 +788,7 @@
         fr.readAsText(file);
       };
 
-      // >>> LOGIN-GATE (Não alterado)
+      // >>> LOGIN-GATE
       if (authReady && !session) {
         return (
           <div className="min-h-screen flex items-center justify-center bg-[#0a0a1a] px-4">
@@ -828,9 +836,8 @@
       }
       // <<< LOGIN-GATE
 
-      // ===== Constantes metas visuais
-      const WATER_GOAL = 3000; // ml
-      const SLEEP_GOAL = 8;    // horas
+      const WATER_GOAL = 3000;
+      const SLEEP_GOAL = 8;
       const water = Math.max(0, day?.meta?.waterMl ?? 0);
       const sleep = Math.max(0, day?.meta?.sleepH ?? 0);
       const waterPct = Math.min(100, (water / WATER_GOAL) * 100);
@@ -1123,7 +1130,7 @@
                     ))}
                     {LIB_WITH_TOTALS.length===0 && (
                       <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                        Nenhuma refeição encontrada. Ajuste filtros/busca.
+                        Nenhuma refeição encontrada. Ajuste filtros/busca ou adicione dados ao Supabase.
                       </div>
                     )}
                   </div>
@@ -1264,13 +1271,14 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v6.1 — Melhoria de segurança no tratamento de chaves Supabase.
+            v6.1 — Melhoria de segurança no tratamento de chaves Supabase e início da migração da biblioteca para o banco de dados.
           </footer>
         </div>
       );
     }
 
-    // ===== Componentes auxiliares (Mantidos inalterados) =====
+    // [Componentes Auxiliares Mantidos inalterados: MinBtn, Section, Stat, MealItem, QuickAdd]
+
     const MinBtn = ({ on, toggle }) => (
       <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1304,7 +1312,6 @@
       );
     };
 
-    // === Item de refeição (sem hooks dentro do .map)
     function MealItem({
       slotKey, index, meal, slotKeys, round,
       resetMealIngredients, duplicateMealTo, toggleLock, removeMeal,
@@ -1400,7 +1407,6 @@
       );
     }
 
-    // Formulário de ingrediente rápido (Mantido inalterado)
     function QuickAdd({ onAdd, disabled }) {
       const [name, setName] = useState("");
       const [kcal, setKcal] = useState("");
