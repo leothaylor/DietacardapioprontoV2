@@ -1,792 +1,855 @@
-{
-"meta": {
-    "version": "6.3",
-    "updatedAt": "2024-11-05",
-    "description": "Fallback de refeições utilizado quando o Supabase não estiver disponível."
-  },
-  "categorias": [
-    "BR",
-    "Balanced",
-    "Breakfast",
-    "Dessert",
-    "Fresh",
-    "High Carb",
-    "High Fat",
-    "High Protein",
-    "Low Carb",
-    "Night",
-    "Plant-Based",
-    "Post-Workout",
-    "Quick",
-    "Snack"
-  ],
  {
-      "id": "whey_agua_30g",
-      "name": "Whey Isolado (30g) + Água (200ml)",
-      "kcal": 155,
-      "protein": 26,
-      "carbs": 3,
-      "fats": 2,
-      "tags": [
-        "High Protein",
-        "Quick",
-        "Post-Workout"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "caseina_30g",
-      "name": "Caseína (30g) + Água (200ml)",
-      "kcal": 170,
-      "protein": 25,
-      "carbs": 5,
-      "fats": 3,
-      "tags": [
-        "High Protein",
-        "Night",
-        "Quick"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "ovos_2_cozidos",
-      "name": "Ovos Cozidos (2 un • 100g)",
-      "kcal": 140,
-      "protein": 12,
-      "carbs": 1,
-      "fats": 10,
-      "tags": [
-        "High Protein",
-        "Low Carb",
-        "BR",
-        "Quick"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "banana_aveia_pasta",
-      "name": "Banana (1 un • 100g) + Aveia (1 csopa • 15g) + Pasta de Amendoim (1 csopa • 15g)",
-      "kcal": 255,
-      "protein": 7,
-      "carbs": 42,
-      "fats": 9,
-      "tags": [
-        "Balanced",
-        "Plant-Based",
-        "Snack"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "iogurte_light_morango",
-      "name": "Iogurte Grego Light (170g) + Morango (100g)",
-      "kcal": 240,
-      "protein": 15,
-      "carbs": 28,
-      "fats": 4,
-      "tags": [
-        "Balanced",
-        "Breakfast"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "cottage_crackers",
-      "name": "Queijo Cottage (150g) + Crackers Integrais (2 un • 12g)",
-      "kcal": 245,
-      "protein": 22,
-      "carbs": 15,
-      "fats": 8,
-      "tags": [
-        "High Protein",
-        "Snack"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "tilapia_salad",
-      "name": "Tilápia Grelhada (120g) + Salada (150g) + Azeite (1 cchá • 5g)",
-      "kcal": 255,
-      "protein": 27,
-      "carbs": 5,
-      "fats": 10,
-      "tags": [
-        "High Protein",
-        "Low Carb",
-        "BR"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "crepioca_simples",
-      "name": "Crepioca: Ovo (1 un) + Tapioca (20g) + Aveia (18g)",
-      "kcal": 255,
-      "protein": 14,
-      "carbs": 28,
-      "fats": 9,
-      "tags": [
-        "Balanced",
-        "Breakfast",
-        "BR"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "mix_castanhas_35g",
-      "name": "Mix de Castanhas (35g)",
-      "kcal": 210,
-      "protein": 6,
-      "carbs": 8,
-      "fats": 18,
-      "tags": [
-        "High Fat",
-        "Snack",
-        "Plant-Based"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "tapioca_ovo_queijo_350",
-      "name": "Tapioca (40g) + Ovo (2 un) + Queijo Minas (30g)",
-      "kcal": 360,
-      "protein": 25,
-      "carbs": 35,
-      "fats": 12,
-      "tags": [
-        "Balanced",
-        "Breakfast",
-        "BR"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "sanduiche_peru_integral",
-      "name": "Pão Integral (2 fatias • 60g) + Peito de Peru (60g) + Requeijão Light (15g)",
-      "kcal": 360,
-      "protein": 25,
-      "carbs": 40,
-      "fats": 9,
-      "tags": [
-        "Balanced",
-        "Quick",
-        "Snack"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "iogurte_granola_fruta",
-      "name": "Iogurte Proteico (170g) + Granola (20g) + Banana (1/2 un • 50g)",
-      "kcal": 350,
-      "protein": 18,
-      "carbs": 47,
-      "fats": 8,
-      "tags": [
-        "Balanced",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "shake_pos_treino_350",
-      "name": "Whey (25g) + Banana (1 un • 100g) + Aveia (20g) + Leite Desnatado (150ml)",
-      "kcal": 350,
-      "protein": 28,
-      "carbs": 48,
-      "fats": 5,
-      "tags": [
-        "High Protein",
-        "Post-Workout"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "omelete_queijo_tomate",
-      "name": "Omelete: Ovos (2 un) + Clara (1 un) + Queijo (20g) + Tomate (80g)",
-      "kcal": 330,
-      "protein": 26,
-      "carbs": 6,
-      "fats": 20,
-      "tags": [
-        "High Protein",
-        "BR"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "crepioca_frango_350",
-      "name": "Crepioca (Tapioca 30g) + Frango Desfiado (80g) + Requeijão Light (20g)",
-      "kcal": 360,
-      "protein": 30,
-      "carbs": 34,
-      "fats": 11,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "cuscuz_ovo_350",
-      "name": "Cuscuz Cozido (150g) + Ovo Cozido (1 un)",
-      "kcal": 350,
-      "protein": 13,
-      "carbs": 60,
-      "fats": 8,
-      "tags": [
-        "Balanced",
-        "BR",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "panqueca_banana_aveia_350",
-      "name": "Panqueca: Banana (1 un • 100g) + Aveia (30g) + Ovo (1 un)",
-      "kcal": 350,
-      "protein": 14,
-      "carbs": 55,
-      "fats": 9,
-      "tags": [
-        "Balanced",
-        "Breakfast",
-        "Dessert"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "vitamina_banana_whey_350",
-      "name": "Vitamina: Banana (1 un) + Whey (20g) + Leite Desnatado (200ml) + Aveia (15g)",
-      "kcal": 345,
-      "protein": 23,
-      "carbs": 48,
-      "fats": 6,
-      "tags": [
-        "High Protein",
-        "Breakfast",
-        "Post-Workout"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "frango_arroz_feijao_500",
-      "name": "Peito de Frango (150g) + Arroz (100g coz.) + Feijão (100g)",
-      "kcal": 500,
-      "protein": 45,
-      "carbs": 48,
-      "fats": 10,
-      "tags": [
-        "Balanced",
-        "High Protein",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "patinho_arroz_feijao_500",
-      "name": "Patinho Moído (140g coz.) + Arroz (90g coz.) + Feijão (100g)",
-      "kcal": 520,
-      "protein": 40,
-      "carbs": 52,
-      "fats": 14,
-      "tags": [
-        "Balanced",
-        "High Protein",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "frango_pure_500",
-      "name": "Frango Grelhado (150g) + Purê de Batata (200g)",
-      "kcal": 490,
-      "protein": 40,
-      "carbs": 55,
-      "fats": 9,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "tilapia_pure_legumes_500",
-      "name": "Tilápia (150g) + Purê de Batata (150g) + Legumes (150g)",
-      "kcal": 510,
-      "protein": 38,
-      "carbs": 50,
-      "fats": 12,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "massa_tomate_frango_500",
-      "name": "Massa Cozida (150g) + Molho Tomate (80g) + Frango (100g)",
-      "kcal": 530,
-      "protein": 35,
-      "carbs": 70,
-      "fats": 11,
-      "tags": [
-        "High Carb",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "quinoa_ovo_salada_500",
-      "name": "Quinoa Cozida (180g) + Ovos Mexidos (2 un) + Salada (100g)",
-      "kcal": 500,
-      "protein": 25,
-      "carbs": 60,
-      "fats": 14,
-      "tags": [
-        "Balanced"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "strogonoff_frango_500",
-      "name": "Strogonoff de Frango (200g) + Arroz (100g coz.)",
-      "kcal": 545,
-      "protein": 36,
-      "carbs": 60,
-      "fats": 15,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "salmao_arroz_integral_500",
-      "name": "Salmão Grelhado (120g) + Arroz Integral (120g coz.)",
-      "kcal": 540,
-      "protein": 34,
-      "carbs": 48,
-      "fats": 20,
-      "tags": [
-        "Balanced",
-        "High Fat"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "cuscuz_frango_500",
-      "name": "Cuscuz Cozido (180g) + Peito de Frango (150g)",
-      "kcal": 495,
-      "protein": 55,
-      "carbs": 45,
-      "fats": 8,
-      "tags": [
-        "High Protein",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "massa_pesto_frango_750",
-      "name": "Massa Integral (200g coz.) + Pesto (2 csopa • 30g) + Frango (150g)",
-      "kcal": 740,
-      "protein": 42,
-      "carbs": 95,
-      "fats": 22,
-      "tags": [
-        "High Carb",
-        "High Protein",
-        "Post-Workout"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "feijoada_leve_750",
-      "name": "Feijoada Caseira (1 porção • 350g) + Arroz (100g coz.)",
-      "kcal": 760,
-      "protein": 38,
-      "carbs": 70,
-      "fats": 32,
-      "tags": [
-        "BR",
-        "Balanced",
-        "High Fat"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "escondidinho_frango_750",
-      "name": "Escondidinho: Frango (160g) + Batata-Doce (250g) + Requeijão Light (30g)",
-      "kcal": 720,
-      "protein": 45,
-      "carbs": 85,
-      "fats": 18,
-      "tags": [
-        "BR",
-        "High Carb"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "lasanha_caseira_750",
-      "name": "Lasanha Caseira (1 fatia grande • 300g)",
-      "kcal": 780,
-      "protein": 36,
-      "carbs": 80,
-      "fats": 30,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "arroz_carreteiro_750",
-      "name": "Arroz Carreteiro Magro (1 prato • 350g)",
-      "kcal": 730,
-      "protein": 40,
-      "carbs": 95,
-      "fats": 18,
-      "tags": [
-        "BR",
-        "High Carb",
-        "High Protein"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "parmegiana_frango_750",
-      "name": "Frango à Parmegiana (220g) + Arroz (120g coz.)",
-      "kcal": 750,
-      "protein": 48,
-      "carbs": 85,
-      "fats": 20,
-      "tags": [
-        "BR",
-        "Balanced"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "mac_frango_queijo_750",
-      "name": "Macarrão (200g coz.) + Frango (150g) + Queijo Mussarela (30g)",
-      "kcal": 720,
-      "protein": 45,
-      "carbs": 68,
-      "fats": 25,
-      "tags": [
-        "High Carb",
-        "High Protein"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "pf_maromba_750",
-      "name": "Arroz (150g coz.) + Feijão (150g) + Frango (180g) + Azeite (1 cchá • 5g)",
-      "kcal": 750,
-      "protein": 52,
-      "carbs": 78,
-      "fats": 20,
-      "tags": [
-        "Balanced",
-        "BR"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "vitamina_acai_whey_350",
-      "name": "Açaí (100g) + Banana (1/2 un • 50g) + Morango (80g) + Whey (20g)",
-      "kcal": 340,
-      "protein": 20,
-      "carbs": 52,
-      "fats": 5,
-      "tags": [
-        "High Protein",
-        "Dessert",
-        "Post-Workout"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "brownie_70_250",
-      "name": "Brownie 70% Cacau (1 pedaço • 70g)",
-      "kcal": 230,
-      "protein": 6,
-      "carbs": 20,
-      "fats": 14,
-      "tags": [
-        "Dessert",
-        "Low Carb"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "salada_frutas_350",
-      "name": "Salada de Frutas: Banana (1/2) + Maçã (1/2) + Mamão (100g) + Granola (20g) + Iogurte (100g)",
-      "kcal": 360,
-      "protein": 10,
-      "carbs": 68,
-      "fats": 7,
-      "tags": [
-        "Balanced",
-        "Dessert",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "pao_ovo_350",
-      "name": "Pão Integral (2 fatias • 60g) + Ovo Mexido (2 un) + Azeite (1 cchá • 5g)",
-      "kcal": 350,
-      "protein": 22,
-      "carbs": 36,
-      "fats": 12,
-      "tags": [
-        "Balanced",
-        "BR",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "tapioca_cuscuz_queijo_350",
-      "name": "Tapioca (20g) + Cuscuz (100g coz.) + Queijo Coalho (30g)",
-      "kcal": 330,
-      "protein": 16,
-      "carbs": 48,
-      "fats": 8,
-      "tags": [
-        "High Carb",
-        "BR",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "iogurte_banana_aveia_350",
-      "name": "Iogurte Natural (200g) + Banana (1 un) + Aveia (20g)",
-      "kcal": 350,
-      "protein": 14,
-      "carbs": 58,
-      "fats": 6,
-      "tags": [
-        "Balanced",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "wrap_frango_500",
-      "name": "Wrap Integral (1 un • 60g) + Frango (120g) + Cottage (40g) + Salada (80g)",
-      "kcal": 480,
-      "protein": 40,
-      "carbs": 38,
-      "fats": 15,
-      "tags": [
-        "High Protein",
-        "Balanced"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "poke_salmao_quinoa_500",
-      "name": "Poke: Salmão (100g) + Quinoa (120g coz.) + Mix Vegetais (150g)",
-      "kcal": 465,
-      "protein": 28,
-      "carbs": 32,
-      "fats": 26,
-      "tags": [
-        "Balanced",
-        "High Fat",
-        "Fresh"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "mingau_proteico_500",
-      "name": "Mingau: Leite Desnatado (250ml) + Aveia (50g) + Whey (20g) + Canela (1 cchá)",
-      "kcal": 520,
-      "protein": 35,
-      "carbs": 68,
-      "fats": 10,
-      "tags": [
-        "High Protein",
-        "Breakfast",
-        "Post-Workout"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "batata_doce_patinho_750",
-      "name": "Patinho Moído (180g coz.) + Batata-Doce (300g coz.) + Azeite (1 cchá • 5g)",
-      "kcal": 790,
-      "protein": 50,
-      "carbs": 95,
-      "fats": 20,
-      "tags": [
-        "High Carb",
-        "High Protein",
-        "BR"
-      ],
-      "block": "750"
-    },
-    {
-      "id": "frango_brocolis_arroz_500",
-      "name": "Peito de Frango (160g) + Arroz (120g coz.) + Brócolis (120g)",
-      "kcal": 520,
-      "protein": 45,
-      "carbs": 52,
-      "fats": 10,
-      "tags": [
-        "Balanced",
-        "Post-Workout",
-        "BR"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "vitamina_banana_amendoim_350",
-      "name": "Leite (200ml) + Banana (1 un) + Pasta de Amendoim (1 csopa • 15g) + Whey (15g)",
-      "kcal": 370,
-      "protein": 20,
-      "carbs": 45,
-      "fats": 12,
-      "tags": [
-        "Balanced",
-        "Post-Workout"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "chocolate_70_40g_250",
-      "name": "Chocolate 70% (2 quadrados grandes • 40g)",
-      "kcal": 240,
-      "protein": 4,
-      "carbs": 12,
-      "fats": 18,
-      "tags": [
-        "Dessert",
-        "Low Carb"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "pao_frances_ovo_350",
-      "name": "Pão Francês (1 un • 50g) + Ovo (1 un) + Queijo Minas (20g)",
-      "kcal": 340,
-      "protein": 16,
-      "carbs": 38,
-      "fats": 12,
-      "tags": [
-        "BR",
-        "Breakfast",
-        "Balanced"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "salada_frango_500",
-      "name": "Salada Completa: Frango (150g) + Mix Folhas (150g) + Tomate (100g) + Azeite (1 csopa • 10g)",
-      "kcal": 500,
-      "protein": 40,
-      "carbs": 18,
-      "fats": 28,
-      "tags": [
-        "Low Carb",
-        "High Protein"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "vitamina_morango_whey_350",
-      "name": "Leite (200ml) + Morango (150g) + Whey (20g) + Aveia (10g)",
-      "kcal": 330,
-      "protein": 23,
-      "carbs": 38,
-      "fats": 6,
-      "tags": [
-        "High Protein",
-        "Breakfast",
-        "Post-Workout"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "salada_frutas_leite_350",
-      "name": "Salada de Frutas (250g) + Leite em Pó Desnatado (2 csopa • 20g)",
-      "kcal": 350,
-      "protein": 14,
-      "carbs": 62,
-      "fats": 4,
-      "tags": [
-        "Dessert",
-        "Breakfast"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "acai_banana_mel_350",
-      "name": "Açaí Polpa (150g) + Banana (1/2 un) + Mel (1 cchá • 7g) + Granola (15g)",
-      "kcal": 360,
-      "protein": 6,
-      "carbs": 62,
-      "fats": 8,
-      "tags": [
-        "Dessert",
-        "High Carb"
-      ],
-      "block": "350"
-    },
-    {
-      "id": "moqueca_tilapia_500",
-      "name": "Moqueca de Tilápia (280g) + Arroz (80g coz.)",
-      "kcal": 520,
-      "protein": 35,
-      "carbs": 48,
-      "fats": 18,
-      "tags": [
-        "BR",
-        "Balanced"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "yakisoba_frango_500",
-      "name": "Yakisoba Caseiro: Macarrão (150g coz.) + Frango (120g) + Legumes (200g)",
-      "kcal": 540,
-      "protein": 35,
-      "carbs": 70,
-      "fats": 12,
-      "tags": [
-        "Balanced"
-      ],
-      "block": "500"
-    },
-    {
-      "id": "tapioca_coco_doce_250",
-      "name": "Tapioca (30g) + Coco Ralado (10g) + Doce de Leite Light (20g)",
-      "kcal": 250,
-      "protein": 3,
-      "carbs": 45,
-      "fats": 6,
-      "tags": [
-        "Dessert",
-        "BR"
-      ],
-      "block": "250"
-    },
-    {
-      "id": "panqueca_integral_frango_500",
-      "name": "Panqueca Integral (2 un • 180g) + Frango (120g) + Molho Tomate (80g)",
-      "kcal": 500,
-      "protein": 40,
-      "carbs": 55,
-      "fats": 10,
-      "tags": [
-        "Balanced",
-        "High Protein",
-        "BR"
-      ],
-      "block": "500"
-    }
-  ]
-}
+-  "categorias": ["High Protein", "Low Carb", "High Carb", "Balanced", "Plant-Based", "High Fat", "Post-Workout", "BR", "Night", "Quick", "Dessert", "Breakfast", "Snack"],
++  "meta": {
++    "version": "6.3",
++    "updatedAt": "2024-11-05",
++    "description": "Fallback de refeições utilizado quando o Supabase não estiver disponível."
++  },
++  "categorias": [
++    "BR",
++    "Balanced",
++    "Breakfast",
++    "Dessert",
++    "Fresh",
++    "High Carb",
++    "High Fat",
++    "High Protein",
++    "Low Carb",
++    "Night",
++    "Plant-Based",
++    "Post-Workout",
++    "Quick",
++    "Snack"
++  ],
+   "items": [
+-    { "id": "whey_agua_30g", "name": "Whey Isolado (30g) + Água (200ml)", "kcal": 155, "protein": 26, "carbs": 3, "fats": 2, "tags": ["High Protein","Quick","Post-Workout"], "block": "250" },
+-    { "id": "caseina_30g", "name": "Caseína (30g) + Água (200ml)", "kcal": 170, "protein": 25, "carbs": 5, "fats": 3, "tags": ["High Protein","Night","Quick"], "block": "250" },
+-    { "id": "ovos_2_cozidos", "name": "Ovos Cozidos (2 un • 100g)", "kcal": 140, "protein": 12, "carbs": 1, "fats": 10, "tags": ["High Protein","Low Carb","BR","Quick"], "block": "250" },
+-    { "id": "banana_aveia_pasta", "name": "Banana (1 un • 100g) + Aveia (1 csopa • 15g) + Pasta de Amendoim (1 csopa • 15g)", "kcal": 255, "protein": 7, "carbs": 42, "fats": 9, "tags": ["Balanced","Plant-Based","Snack"], "block": "250" },
+-    { "id": "iogurte_light_morango", "name": "Iogurte Grego Light (170g) + Morango (100g)", "kcal": 240, "protein": 15, "carbs": 28, "fats": 4, "tags": ["Balanced","Breakfast"], "block": "250" },
+-    { "id": "cottage_crackers", "name": "Queijo Cottage (150g) + Crackers Integrais (2 un • 12g)", "kcal": 245, "protein": 22, "carbs": 15, "fats": 8, "tags": ["High Protein","Snack"], "block": "250" },
+-    { "id": "tilapia_salad", "name": "Tilápia Grelhada (120g) + Salada (150g) + Azeite (1 cchá • 5g)", "kcal": 255, "protein": 27, "carbs": 5, "fats": 10, "tags": ["High Protein","Low Carb","BR"], "block": "250" },
+-    { "id": "crepioca_simples", "name": "Crepioca: Ovo (1 un) + Tapioca (20g) + Aveia (18g)", "kcal": 255, "protein": 14, "carbs": 28, "fats": 9, "tags": ["Balanced","Breakfast","BR"], "block": "250" },
+-    { "id": "mix_castanhas_35g", "name": "Mix de Castanhas (35g)", "kcal": 210, "protein": 6, "carbs": 8, "fats": 18, "tags": ["High Fat","Snack","Plant-Based"], "block": "250" },
+-
+-    { "id": "tapioca_ovo_queijo_350", "name": "Tapioca (40g) + Ovo (2 un) + Queijo Minas (30g)", "kcal": 360, "protein": 25, "carbs": 35, "fats": 12, "tags": ["Balanced","Breakfast","BR"], "block": "350" },
+-    { "id": "sanduiche_peru_integral", "name": "Pão Integral (2 fatias • 60g) + Peito de Peru (60g) + Requeijão Light (15g)", "kcal": 360, "protein": 25, "carbs": 40, "fats": 9, "tags": ["Balanced","Quick","Snack"], "block": "350" },
+-    { "id": "iogurte_granola_fruta", "name": "Iogurte Proteico (170g) + Granola (20g) + Banana (1/2 un • 50g)", "kcal": 350, "protein": 18, "carbs": 47, "fats": 8, "tags": ["Balanced","Breakfast"], "block": "350" },
+-    { "id": "shake_pos_treino_350", "name": "Whey (25g) + Banana (1 un • 100g) + Aveia (20g) + Leite Desnatado (150ml)", "kcal": 350, "protein": 28, "carbs": 48, "fats": 5, "tags": ["High Protein","Post-Workout"], "block": "350" },
+-    { "id": "omelete_queijo_tomate", "name": "Omelete: Ovos (2 un) + Clara (1 un) + Queijo (20g) + Tomate (80g)", "kcal": 330, "protein": 26, "carbs": 6, "fats": 20, "tags": ["High Protein","BR"], "block": "350" },
+-    { "id": "crepioca_frango_350", "name": "Crepioca (Tapioca 30g) + Frango Desfiado (80g) + Requeijão Light (20g)", "kcal": 360, "protein": 30, "carbs": 34, "fats": 11, "tags": ["Balanced","BR"], "block": "350" },
+-    { "id": "cuscuz_ovo_350", "name": "Cuscuz Cozido (150g) + Ovo Cozido (1 un)", "kcal": 350, "protein": 13, "carbs": 60, "fats": 8, "tags": ["Balanced","BR","Breakfast"], "block": "350" },
+-    { "id": "panqueca_banana_aveia_350", "name": "Panqueca: Banana (1 un • 100g) + Aveia (30g) + Ovo (1 un)", "kcal": 350, "protein": 14, "carbs": 55, "fats": 9, "tags": ["Balanced","Breakfast","Dessert"], "block": "350" },
+-    { "id": "vitamina_banana_whey_350", "name": "Vitamina: Banana (1 un) + Whey (20g) + Leite Desnatado (200ml) + Aveia (15g)", "kcal": 345, "protein": 23, "carbs": 48, "fats": 6, "tags": ["High Protein","Breakfast","Post-Workout"], "block": "350" },
+-
+-    { "id": "frango_arroz_feijao_500", "name": "Peito de Frango (150g) + Arroz (100g coz.) + Feijão (100g)", "kcal": 500, "protein": 45, "carbs": 48, "fats": 10, "tags": ["Balanced","High Protein","BR"], "block": "500" },
+-    { "id": "patinho_arroz_feijao_500", "name": "Patinho Moído (140g coz.) + Arroz (90g coz.) + Feijão (100g)", "kcal": 520, "protein": 40, "carbs": 52, "fats": 14, "tags": ["Balanced","High Protein","BR"], "block": "500" },
+-    { "id": "frango_pure_500", "name": "Frango Grelhado (150g) + Purê de Batata (200g)", "kcal": 490, "protein": 40, "carbs": 55, "fats": 9, "tags": ["Balanced","BR"], "block": "500" },
+-    { "id": "tilapia_pure_legumes_500", "name": "Tilápia (150g) + Purê de Batata (150g) + Legumes (150g)", "kcal": 510, "protein": 38, "carbs": 50, "fats": 12, "tags": ["Balanced","BR"], "block": "500" },
+-    { "id": "massa_tomate_frango_500", "name": "Massa Cozida (150g) + Molho Tomate (80g) + Frango (100g)", "kcal": 530, "protein": 35, "carbs": 70, "fats": 11, "tags": ["High Carb","BR"], "block": "500" },
+-    { "id": "quinoa_ovo_salada_500", "name": "Quinoa Cozida (180g) + Ovos Mexidos (2 un) + Salada (100g)", "kcal": 500, "protein": 25, "carbs": 60, "fats": 14, "tags": ["Balanced"], "block": "500" },
+-    { "id": "strogonoff_frango_500", "name": "Strogonoff de Frango (200g) + Arroz (100g coz.)", "kcal": 545, "protein": 36, "carbs": 60, "fats": 15, "tags": ["Balanced","BR"], "block": "500" },
+-    { "id": "salmao_arroz_integral_500", "name": "Salmão Grelhado (120g) + Arroz Integral (120g coz.)", "kcal": 540, "protein": 34, "carbs": 48, "fats": 20, "tags": ["Balanced","High Fat"], "block": "500" },
+-    { "id": "cuscuz_frango_500", "name": "Cuscuz Cozido (180g) + Peito de Frango (150g)", "kcal": 495, "protein": 55, "carbs": 45, "fats": 8, "tags": ["High Protein","BR"], "block": "500" },
+-
+-    { "id": "massa_pesto_frango_750", "name": "Massa Integral (200g coz.) + Pesto (2 csopa • 30g) + Frango (150g)", "kcal": 740, "protein": 42, "carbs": 95, "fats": 22, "tags": ["High Carb","High Protein","Post-Workout"], "block": "750" },
+-    { "id": "feijoada_leve_750", "name": "Feijoada Caseira (1 porção • 350g) + Arroz (100g coz.)", "kcal": 760, "protein": 38, "carbs": 70, "fats": 32, "tags": ["BR","Balanced","High Fat"], "block": "750" },
+-    { "id": "escondidinho_frango_750", "name": "Escondidinho: Frango (160g) + Batata-Doce (250g) + Requeijão Light (30g)", "kcal": 720, "protein": 45, "carbs": 85, "fats": 18, "tags": ["BR","High Carb"], "block": "750" },
+-    { "id": "lasanha_caseira_750", "name": "Lasanha Caseira (1 fatia grande • 300g)", "kcal": 780, "protein": 36, "carbs": 80, "fats": 30, "tags": ["Balanced","BR"], "block": "750" },
+-    { "id": "arroz_carreteiro_750", "name": "Arroz Carreteiro Magro (1 prato • 350g)", "kcal": 730, "protein": 40, "carbs": 95, "fats": 18, "tags": ["BR","High Carb","High Protein"], "block": "750" },
+-    { "id": "parmegiana_frango_750", "name": "Frango à Parmegiana (220g) + Arroz (120g coz.)", "kcal": 750, "protein": 48, "carbs": 85, "fats": 20, "tags": ["BR","Balanced"], "block": "750" },
+-    { "id": "mac_frango_queijo_750", "name": "Macarrão (200g coz.) + Frango (150g) + Queijo Mussarela (30g)", "kcal": 720, "protein": 45, "carbs": 68, "fats": 25, "tags": ["High Carb","High Protein"], "block": "750" },
+-    { "id": "pf_maromba_750", "name": "Arroz (150g coz.) + Feijão (150g) + Frango (180g) + Azeite (1 cchá • 5g)", "kcal": 750, "protein": 52, "carbs": 78, "fats": 20, "tags": ["Balanced","BR"], "block": "750" },
+-
+-    { "id": "vitamina_acai_whey_350", "name": "Açaí (100g) + Banana (1/2 un • 50g) + Morango (80g) + Whey (20g)", "kcal": 340, "protein": 20, "carbs": 52, "fats": 5, "tags": ["High Protein","Dessert","Post-Workout"], "block": "350" },
+-    { "id": "brownie_70_250", "name": "Brownie 70% Cacau (1 pedaço • 70g)", "kcal": 230, "protein": 6, "carbs": 20, "fats": 14, "tags": ["Dessert","Low Carb"], "block": "250" },
+-    { "id": "salada_frutas_350", "name": "Salada de Frutas: Banana (1/2) + Maçã (1/2) + Mamão (100g) + Granola (20g) + Iogurte (100g)", "kcal": 360, "protein": 10, "carbs": 68, "fats": 7, "tags": ["Balanced","Dessert","Breakfast"], "block": "350" },
+-    { "id": "pao_ovo_350", "name": "Pão Integral (2 fatias • 60g) + Ovo Mexido (2 un) + Azeite (1 cchá • 5g)", "kcal": 350, "protein": 22, "carbs": 36, "fats": 12, "tags": ["Balanced","BR","Breakfast"], "block": "350" },
+-    { "id": "tapioca_cuscuz_queijo_350", "name": "Tapioca (20g) + Cuscuz (100g coz.) + Queijo Coalho (30g)", "kcal": 330, "protein": 16, "carbs": 48, "fats": 8, "tags": ["High Carb","BR","Breakfast"], "block": "350" },
+-    { "id": "iogurte_banana_aveia_350", "name": "Iogurte Natural (200g) + Banana (1 un) + Aveia (20g)", "kcal": 350, "protein": 14, "carbs": 58, "fats": 6, "tags": ["Balanced","Breakfast"], "block": "350" },
+-    { "id": "wrap_frango_500", "name": "Wrap Integral (1 un • 60g) + Frango (120g) + Cottage (40g) + Salada (80g)", "kcal": 480, "protein": 40, "carbs": 38, "fats": 15, "tags": ["High Protein","Balanced"], "block": "500" },
+-    { "id": "poke_salmao_quinoa_500", "name": "Poke: Salmão (100g) + Quinoa (120g coz.) + Mix Vegetais (150g)", "kcal": 465, "protein": 28, "carbs": 32, "fats": 26, "tags": ["Balanced","High Fat Saudável"], "block": "500" },
+-    { "id": "mingau_proteico_500", "name": "Mingau: Leite Desnatado (250ml) + Aveia (50g) + Whey (20g) + Canela (1 cchá)", "kcal": 520, "protein": 35, "carbs": 68, "fats": 10, "tags": ["High Protein","Breakfast","Post-Workout"], "block": "500" },
+-    { "id": "batata_doce_patinho_750", "name": "Patinho Moído (180g coz.) + Batata-Doce (300g coz.) + Azeite (1 cchá • 5g)", "kcal": 790, "protein": 50, "carbs": 95, "fats": 20, "tags": ["High Carb","High Protein","BR"], "block": "750" },
+-    { "id": "frango_brocolis_arroz_500", "name": "Peito de Frango (160g) + Arroz (120g coz.) + Brócolis (120g)", "kcal": 520, "protein": 45, "carbs": 52, "fats": 10, "tags": ["Balanced","Post-Workout","BR"], "block": "500" },
+-    { "id": "vitamina_banana_amendoim_350", "name": "Leite (200ml) + Banana (1 un) + Pasta de Amendoim (1 csopa • 15g) + Whey (15g)", "kcal": 370, "protein": 20, "carbs": 45, "fats": 12, "tags": ["Balanced","Post-Workout"], "block": "350" },
+-    { "id": "chocolate_70_40g_250", "name": "Chocolate 70% (2 quadrados grandes • 40g)", "kcal": 240, "protein": 4, "carbs": 12, "fats": 18, "tags": ["Dessert","Low Carb"], "block": "250" },
+-    { "id": "pao_frances_ovo_350", "name": "Pão Francês (1 un • 50g) + Ovo (1 un) + Queijo Minas (20g)", "kcal": 340, "protein": 16, "carbs": 38, "fats": 12, "tags": ["BR","Breakfast","Balanced"], "block": "350" },
+-    { "id": "salada_frango_500", "name": "Salada Completa: Frango (150g) + Mix Folhas (150g) + Tomate (100g) + Azeite (1 csopa • 10g)", "kcal": 500, "protein": 40, "carbs": 18, "fats": 28, "tags": ["Low Carb","High Protein"], "block": "500" },
+-    { "id": "vitamina_morango_whey_350", "name": "Leite (200ml) + Morango (150g) + Whey (20g) + Aveia (10g)", "kcal": 330, "protein": 23, "carbs": 38, "fats": 6, "tags": ["High Protein","Breakfast","Post-Workout"], "block": "350" },
+-    { "id": "salada_frutas_leite_350", "name": "Salada de Frutas (250g) + Leite em Pó Desnatado (2 csopa • 20g)", "kcal": 350, "protein": 14, "carbs": 62, "fats": 4, "tags": ["Dessert","Breakfast"], "block": "350" },
+-    { "id": "acai_banana_mel_350", "name": "Açaí Polpa (150g) + Banana (1/2 un) + Mel (1 cchá • 7g) + Granola (15g)", "kcal": 360, "protein": 6, "carbs": 62, "fats": 8, "tags": ["Dessert","High Carb"], "block": "350" },
+-    { "id": "moqueca_tilapia_500", "name": "Moqueca de Tilápia (280g) + Arroz (80g coz.)", "kcal": 520, "protein": 35, "carbs": 48, "fats": 18, "tags": ["BR","Balanced"], "block": "500" },
+-    { "id": "yakisoba_frango_500", "name": "Yakisoba Caseiro: Macarrão (150g coz.) + Frango (120g) + Legumes (200g)", "kcal": 540, "protein": 35, "carbs": 70, "fats": 12, "tags": ["Balanced"], "block": "500" },
+-    { "id": "tapioca_coco_doce_250", "name": "Tapioca (30g) + Coco Ralado (10g) + Doce de Leite Light (20g)", "kcal": 250, "protein": 3, "carbs": 45, "fats": 6, "tags": ["Dessert","BR"], "block": "250" },
+-    { "id": "panqueca_integral_frango_500", "name": "Panqueca Integral (2 un • 180g) + Frango (120g) + Molho Tomate (80g)", "kcal": 500, "protein": 40, "carbs": 55, "fats": 10, "tags": ["Balanced","High Protein","BR"], "block": "500" }
++    {
++      "id": "whey_agua_30g",
++      "name": "Whey Isolado (30g) + Água (200ml)",
++      "kcal": 155,
++      "protein": 26,
++      "carbs": 3,
++      "fats": 2,
++      "tags": [
++        "High Protein",
++        "Quick",
++        "Post-Workout"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "caseina_30g",
++      "name": "Caseína (30g) + Água (200ml)",
++      "kcal": 170,
++      "protein": 25,
++      "carbs": 5,
++      "fats": 3,
++      "tags": [
++        "High Protein",
++        "Night",
++        "Quick"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "ovos_2_cozidos",
++      "name": "Ovos Cozidos (2 un • 100g)",
++      "kcal": 140,
++      "protein": 12,
++      "carbs": 1,
++      "fats": 10,
++      "tags": [
++        "High Protein",
++        "Low Carb",
++        "BR",
++        "Quick"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "banana_aveia_pasta",
++      "name": "Banana (1 un • 100g) + Aveia (1 csopa • 15g) + Pasta de Amendoim (1 csopa • 15g)",
++      "kcal": 255,
++      "protein": 7,
++      "carbs": 42,
++      "fats": 9,
++      "tags": [
++        "Balanced",
++        "Plant-Based",
++        "Snack"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "iogurte_light_morango",
++      "name": "Iogurte Grego Light (170g) + Morango (100g)",
++      "kcal": 240,
++      "protein": 15,
++      "carbs": 28,
++      "fats": 4,
++      "tags": [
++        "Balanced",
++        "Breakfast"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "cottage_crackers",
++      "name": "Queijo Cottage (150g) + Crackers Integrais (2 un • 12g)",
++      "kcal": 245,
++      "protein": 22,
++      "carbs": 15,
++      "fats": 8,
++      "tags": [
++        "High Protein",
++        "Snack"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "tilapia_salad",
++      "name": "Tilápia Grelhada (120g) + Salada (150g) + Azeite (1 cchá • 5g)",
++      "kcal": 255,
++      "protein": 27,
++      "carbs": 5,
++      "fats": 10,
++      "tags": [
++        "High Protein",
++        "Low Carb",
++        "BR"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "crepioca_simples",
++      "name": "Crepioca: Ovo (1 un) + Tapioca (20g) + Aveia (18g)",
++      "kcal": 255,
++      "protein": 14,
++      "carbs": 28,
++      "fats": 9,
++      "tags": [
++        "Balanced",
++        "Breakfast",
++        "BR"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "mix_castanhas_35g",
++      "name": "Mix de Castanhas (35g)",
++      "kcal": 210,
++      "protein": 6,
++      "carbs": 8,
++      "fats": 18,
++      "tags": [
++        "High Fat",
++        "Snack",
++        "Plant-Based"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "tapioca_ovo_queijo_350",
++      "name": "Tapioca (40g) + Ovo (2 un) + Queijo Minas (30g)",
++      "kcal": 360,
++      "protein": 25,
++      "carbs": 35,
++      "fats": 12,
++      "tags": [
++        "Balanced",
++        "Breakfast",
++        "BR"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "sanduiche_peru_integral",
++      "name": "Pão Integral (2 fatias • 60g) + Peito de Peru (60g) + Requeijão Light (15g)",
++      "kcal": 360,
++      "protein": 25,
++      "carbs": 40,
++      "fats": 9,
++      "tags": [
++        "Balanced",
++        "Quick",
++        "Snack"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "iogurte_granola_fruta",
++      "name": "Iogurte Proteico (170g) + Granola (20g) + Banana (1/2 un • 50g)",
++      "kcal": 350,
++      "protein": 18,
++      "carbs": 47,
++      "fats": 8,
++      "tags": [
++        "Balanced",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "shake_pos_treino_350",
++      "name": "Whey (25g) + Banana (1 un • 100g) + Aveia (20g) + Leite Desnatado (150ml)",
++      "kcal": 350,
++      "protein": 28,
++      "carbs": 48,
++      "fats": 5,
++      "tags": [
++        "High Protein",
++        "Post-Workout"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "omelete_queijo_tomate",
++      "name": "Omelete: Ovos (2 un) + Clara (1 un) + Queijo (20g) + Tomate (80g)",
++      "kcal": 330,
++      "protein": 26,
++      "carbs": 6,
++      "fats": 20,
++      "tags": [
++        "High Protein",
++        "BR"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "crepioca_frango_350",
++      "name": "Crepioca (Tapioca 30g) + Frango Desfiado (80g) + Requeijão Light (20g)",
++      "kcal": 360,
++      "protein": 30,
++      "carbs": 34,
++      "fats": 11,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "cuscuz_ovo_350",
++      "name": "Cuscuz Cozido (150g) + Ovo Cozido (1 un)",
++      "kcal": 350,
++      "protein": 13,
++      "carbs": 60,
++      "fats": 8,
++      "tags": [
++        "Balanced",
++        "BR",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "panqueca_banana_aveia_350",
++      "name": "Panqueca: Banana (1 un • 100g) + Aveia (30g) + Ovo (1 un)",
++      "kcal": 350,
++      "protein": 14,
++      "carbs": 55,
++      "fats": 9,
++      "tags": [
++        "Balanced",
++        "Breakfast",
++        "Dessert"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "vitamina_banana_whey_350",
++      "name": "Vitamina: Banana (1 un) + Whey (20g) + Leite Desnatado (200ml) + Aveia (15g)",
++      "kcal": 345,
++      "protein": 23,
++      "carbs": 48,
++      "fats": 6,
++      "tags": [
++        "High Protein",
++        "Breakfast",
++        "Post-Workout"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "frango_arroz_feijao_500",
++      "name": "Peito de Frango (150g) + Arroz (100g coz.) + Feijão (100g)",
++      "kcal": 500,
++      "protein": 45,
++      "carbs": 48,
++      "fats": 10,
++      "tags": [
++        "Balanced",
++        "High Protein",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "patinho_arroz_feijao_500",
++      "name": "Patinho Moído (140g coz.) + Arroz (90g coz.) + Feijão (100g)",
++      "kcal": 520,
++      "protein": 40,
++      "carbs": 52,
++      "fats": 14,
++      "tags": [
++        "Balanced",
++        "High Protein",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "frango_pure_500",
++      "name": "Frango Grelhado (150g) + Purê de Batata (200g)",
++      "kcal": 490,
++      "protein": 40,
++      "carbs": 55,
++      "fats": 9,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "tilapia_pure_legumes_500",
++      "name": "Tilápia (150g) + Purê de Batata (150g) + Legumes (150g)",
++      "kcal": 510,
++      "protein": 38,
++      "carbs": 50,
++      "fats": 12,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "massa_tomate_frango_500",
++      "name": "Massa Cozida (150g) + Molho Tomate (80g) + Frango (100g)",
++      "kcal": 530,
++      "protein": 35,
++      "carbs": 70,
++      "fats": 11,
++      "tags": [
++        "High Carb",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "quinoa_ovo_salada_500",
++      "name": "Quinoa Cozida (180g) + Ovos Mexidos (2 un) + Salada (100g)",
++      "kcal": 500,
++      "protein": 25,
++      "carbs": 60,
++      "fats": 14,
++      "tags": [
++        "Balanced"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "strogonoff_frango_500",
++      "name": "Strogonoff de Frango (200g) + Arroz (100g coz.)",
++      "kcal": 545,
++      "protein": 36,
++      "carbs": 60,
++      "fats": 15,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "salmao_arroz_integral_500",
++      "name": "Salmão Grelhado (120g) + Arroz Integral (120g coz.)",
++      "kcal": 540,
++      "protein": 34,
++      "carbs": 48,
++      "fats": 20,
++      "tags": [
++        "Balanced",
++        "High Fat"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "cuscuz_frango_500",
++      "name": "Cuscuz Cozido (180g) + Peito de Frango (150g)",
++      "kcal": 495,
++      "protein": 55,
++      "carbs": 45,
++      "fats": 8,
++      "tags": [
++        "High Protein",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "massa_pesto_frango_750",
++      "name": "Massa Integral (200g coz.) + Pesto (2 csopa • 30g) + Frango (150g)",
++      "kcal": 740,
++      "protein": 42,
++      "carbs": 95,
++      "fats": 22,
++      "tags": [
++        "High Carb",
++        "High Protein",
++        "Post-Workout"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "feijoada_leve_750",
++      "name": "Feijoada Caseira (1 porção • 350g) + Arroz (100g coz.)",
++      "kcal": 760,
++      "protein": 38,
++      "carbs": 70,
++      "fats": 32,
++      "tags": [
++        "BR",
++        "Balanced",
++        "High Fat"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "escondidinho_frango_750",
++      "name": "Escondidinho: Frango (160g) + Batata-Doce (250g) + Requeijão Light (30g)",
++      "kcal": 720,
++      "protein": 45,
++      "carbs": 85,
++      "fats": 18,
++      "tags": [
++        "BR",
++        "High Carb"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "lasanha_caseira_750",
++      "name": "Lasanha Caseira (1 fatia grande • 300g)",
++      "kcal": 780,
++      "protein": 36,
++      "carbs": 80,
++      "fats": 30,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "arroz_carreteiro_750",
++      "name": "Arroz Carreteiro Magro (1 prato • 350g)",
++      "kcal": 730,
++      "protein": 40,
++      "carbs": 95,
++      "fats": 18,
++      "tags": [
++        "BR",
++        "High Carb",
++        "High Protein"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "parmegiana_frango_750",
++      "name": "Frango à Parmegiana (220g) + Arroz (120g coz.)",
++      "kcal": 750,
++      "protein": 48,
++      "carbs": 85,
++      "fats": 20,
++      "tags": [
++        "BR",
++        "Balanced"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "mac_frango_queijo_750",
++      "name": "Macarrão (200g coz.) + Frango (150g) + Queijo Mussarela (30g)",
++      "kcal": 720,
++      "protein": 45,
++      "carbs": 68,
++      "fats": 25,
++      "tags": [
++        "High Carb",
++        "High Protein"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "pf_maromba_750",
++      "name": "Arroz (150g coz.) + Feijão (150g) + Frango (180g) + Azeite (1 cchá • 5g)",
++      "kcal": 750,
++      "protein": 52,
++      "carbs": 78,
++      "fats": 20,
++      "tags": [
++        "Balanced",
++        "BR"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "vitamina_acai_whey_350",
++      "name": "Açaí (100g) + Banana (1/2 un • 50g) + Morango (80g) + Whey (20g)",
++      "kcal": 340,
++      "protein": 20,
++      "carbs": 52,
++      "fats": 5,
++      "tags": [
++        "High Protein",
++        "Dessert",
++        "Post-Workout"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "brownie_70_250",
++      "name": "Brownie 70% Cacau (1 pedaço • 70g)",
++      "kcal": 230,
++      "protein": 6,
++      "carbs": 20,
++      "fats": 14,
++      "tags": [
++        "Dessert",
++        "Low Carb"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "salada_frutas_350",
++      "name": "Salada de Frutas: Banana (1/2) + Maçã (1/2) + Mamão (100g) + Granola (20g) + Iogurte (100g)",
++      "kcal": 360,
++      "protein": 10,
++      "carbs": 68,
++      "fats": 7,
++      "tags": [
++        "Balanced",
++        "Dessert",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "pao_ovo_350",
++      "name": "Pão Integral (2 fatias • 60g) + Ovo Mexido (2 un) + Azeite (1 cchá • 5g)",
++      "kcal": 350,
++      "protein": 22,
++      "carbs": 36,
++      "fats": 12,
++      "tags": [
++        "Balanced",
++        "BR",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "tapioca_cuscuz_queijo_350",
++      "name": "Tapioca (20g) + Cuscuz (100g coz.) + Queijo Coalho (30g)",
++      "kcal": 330,
++      "protein": 16,
++      "carbs": 48,
++      "fats": 8,
++      "tags": [
++        "High Carb",
++        "BR",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "iogurte_banana_aveia_350",
++      "name": "Iogurte Natural (200g) + Banana (1 un) + Aveia (20g)",
++      "kcal": 350,
++      "protein": 14,
++      "carbs": 58,
++      "fats": 6,
++      "tags": [
++        "Balanced",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "wrap_frango_500",
++      "name": "Wrap Integral (1 un • 60g) + Frango (120g) + Cottage (40g) + Salada (80g)",
++      "kcal": 480,
++      "protein": 40,
++      "carbs": 38,
++      "fats": 15,
++      "tags": [
++        "High Protein",
++        "Balanced"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "poke_salmao_quinoa_500",
++      "name": "Poke: Salmão (100g) + Quinoa (120g coz.) + Mix Vegetais (150g)",
++      "kcal": 465,
++      "protein": 28,
++      "carbs": 32,
++      "fats": 26,
++      "tags": [
++        "Balanced",
++        "High Fat",
++        "Fresh"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "mingau_proteico_500",
++      "name": "Mingau: Leite Desnatado (250ml) + Aveia (50g) + Whey (20g) + Canela (1 cchá)",
++      "kcal": 520,
++      "protein": 35,
++      "carbs": 68,
++      "fats": 10,
++      "tags": [
++        "High Protein",
++        "Breakfast",
++        "Post-Workout"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "batata_doce_patinho_750",
++      "name": "Patinho Moído (180g coz.) + Batata-Doce (300g coz.) + Azeite (1 cchá • 5g)",
++      "kcal": 790,
++      "protein": 50,
++      "carbs": 95,
++      "fats": 20,
++      "tags": [
++        "High Carb",
++        "High Protein",
++        "BR"
++      ],
++      "block": "750"
++    },
++    {
++      "id": "frango_brocolis_arroz_500",
++      "name": "Peito de Frango (160g) + Arroz (120g coz.) + Brócolis (120g)",
++      "kcal": 520,
++      "protein": 45,
++      "carbs": 52,
++      "fats": 10,
++      "tags": [
++        "Balanced",
++        "Post-Workout",
++        "BR"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "vitamina_banana_amendoim_350",
++      "name": "Leite (200ml) + Banana (1 un) + Pasta de Amendoim (1 csopa • 15g) + Whey (15g)",
++      "kcal": 370,
++      "protein": 20,
++      "carbs": 45,
++      "fats": 12,
++      "tags": [
++        "Balanced",
++        "Post-Workout"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "chocolate_70_40g_250",
++      "name": "Chocolate 70% (2 quadrados grandes • 40g)",
++      "kcal": 240,
++      "protein": 4,
++      "carbs": 12,
++      "fats": 18,
++      "tags": [
++        "Dessert",
++        "Low Carb"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "pao_frances_ovo_350",
++      "name": "Pão Francês (1 un • 50g) + Ovo (1 un) + Queijo Minas (20g)",
++      "kcal": 340,
++      "protein": 16,
++      "carbs": 38,
++      "fats": 12,
++      "tags": [
++        "BR",
++        "Breakfast",
++        "Balanced"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "salada_frango_500",
++      "name": "Salada Completa: Frango (150g) + Mix Folhas (150g) + Tomate (100g) + Azeite (1 csopa • 10g)",
++      "kcal": 500,
++      "protein": 40,
++      "carbs": 18,
++      "fats": 28,
++      "tags": [
++        "Low Carb",
++        "High Protein"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "vitamina_morango_whey_350",
++      "name": "Leite (200ml) + Morango (150g) + Whey (20g) + Aveia (10g)",
++      "kcal": 330,
++      "protein": 23,
++      "carbs": 38,
++      "fats": 6,
++      "tags": [
++        "High Protein",
++        "Breakfast",
++        "Post-Workout"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "salada_frutas_leite_350",
++      "name": "Salada de Frutas (250g) + Leite em Pó Desnatado (2 csopa • 20g)",
++      "kcal": 350,
++      "protein": 14,
++      "carbs": 62,
++      "fats": 4,
++      "tags": [
++        "Dessert",
++        "Breakfast"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "acai_banana_mel_350",
++      "name": "Açaí Polpa (150g) + Banana (1/2 un) + Mel (1 cchá • 7g) + Granola (15g)",
++      "kcal": 360,
++      "protein": 6,
++      "carbs": 62,
++      "fats": 8,
++      "tags": [
++        "Dessert",
++        "High Carb"
++      ],
++      "block": "350"
++    },
++    {
++      "id": "moqueca_tilapia_500",
++      "name": "Moqueca de Tilápia (280g) + Arroz (80g coz.)",
++      "kcal": 520,
++      "protein": 35,
++      "carbs": 48,
++      "fats": 18,
++      "tags": [
++        "BR",
++        "Balanced"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "yakisoba_frango_500",
++      "name": "Yakisoba Caseiro: Macarrão (150g coz.) + Frango (120g) + Legumes (200g)",
++      "kcal": 540,
++      "protein": 35,
++      "carbs": 70,
++      "fats": 12,
++      "tags": [
++        "Balanced"
++      ],
++      "block": "500"
++    },
++    {
++      "id": "tapioca_coco_doce_250",
++      "name": "Tapioca (30g) + Coco Ralado (10g) + Doce de Leite Light (20g)",
++      "kcal": 250,
++      "protein": 3,
++      "carbs": 45,
++      "fats": 6,
++      "tags": [
++        "Dessert",
++        "BR"
++      ],
++      "block": "250"
++    },
++    {
++      "id": "panqueca_integral_frango_500",
++      "name": "Panqueca Integral (2 un • 180g) + Frango (120g) + Molho Tomate (80g)",
++      "kcal": 500,
++      "protein": 40,
++      "carbs": 55,
++      "fats": 10,
++      "tags": [
++        "Balanced",
++        "High Protein",
++        "BR"
++      ],
++      "block": "500"
++    }
+   ]
+ }
