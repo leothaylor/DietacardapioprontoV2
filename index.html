@@ -3,33 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v6.2 • Adicionar Refeição)</title>
-  
+  <title>Cardápio Inteligente (v6.2)</title>
+
+  <!-- libs -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
+
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-    html, body, #root { min-height: 100vh; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif; }
-    /* Modo compacto mobile */
-    @media (max-width: 640px) {
-      .card-compact { padding: 0.75rem !important; border-radius: 0.75rem !important; }
-      .hide-mobile { display:none !important; }
-      .meal-tags { display:none !important; }
-    }
-    /* dropdown simples */
-    .menu { position: relative; }
-    .menu > .menu-content { display:none; position:absolute; right:0; top:100%; background:#0f172a; border:1px solid #334155; border-radius:0.5rem; min-width: 180px; z-index:50; }
-    .menu.open > .menu-content { display:block; }
-    .menu-item { padding:0.5rem 0.75rem; cursor:pointer; font-size:0.875rem; color:#e2e8f0; }
-    .menu-item:hover { background:#1f2937; }
+    /* seu CSS aqui (ok manter igual) */
   </style>
 </head>
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
+
+  <!-- TODO: cole aqui dentro TODO o seu JS/JSX (exatamente como já está) -->
+  <script type="text/babel">
+    /* SEU CÓDIGO AQUI */
+  </script>
+</body>
+</html>
 
   <!-- CONFIG SUPABASE -->
 <script type="text/babel">
@@ -1479,4 +1474,5 @@
   </script>
 </body>
 </html>
+
 
