@@ -1,4 +1,5 @@
- "meta": {
+{
+"meta": {
     "version": "6.3",
     "updatedAt": "2024-11-05",
     "description": "Fallback de refeições utilizado quando o Supabase não estiver disponível."
