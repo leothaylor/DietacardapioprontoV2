@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v6.0 • Supabase)</title>
+  <title>Cardápio Inteligente (v6.1 • Supabase)</title>
+  
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
     html, body, #root { min-height: 100vh; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif; }
@@ -32,17 +34,31 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect, useRef } = React;
 
-    // ===== SUPABASE =====
-    const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
+    // ===================================================================
+    // ⚠️ 🟢 ATUALIZAÇÃO DE SEGURANÇA (v6.1)
+    // SUBSTITUA AQUI COM SEUS DADOS REAIS DO PAINEL SUPABASE.
+    // DICA: Evite comitar chaves reais em repositórios públicos como o GitHub.
+    // ===================================================================
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // EX: 'https://grnwskvvbglclnijbgdq.supabase.co'
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'; // Sua chave 'anon public'
+    
+    // Se as chaves NÃO forem substituídas, a aplicação alertará o usuário.
+    if (SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON_KEY.includes('YOUR_')) {
+      alert("⚠️ ERRO DE CONFIGURAÇÃO: Por favor, substitua 'YOUR_SUPABASE_URL' e 'YOUR_ANON_KEY' no código. O app não funcionará sem as credenciais Supabase.");
+      // Sobrescreve a função de criação de cliente para evitar erros de runtime
+      window.supabase = { createClient: () => ({ auth: { getSession: () => ({ data: {} }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }), signInWithPassword: () => ({ error: { message: 'Configuração Incompleta.' } }), signUp: () => ({ error: { message: 'Configuração Incompleta.' } }), signOut: () => {} } }) };
+    }
+    
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const AVATAR_BUCKET = 'avatars';
+    // ===================================================================
 
     // ===== UTILS =====
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
     const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
     const toNum = v => Number.isFinite(+v) ? +v : 0;
-    const log10 = x => Math.log(x)/Math.LN10;
+    // Removendo log10 duplicado
+    // const log10 = x => Math.log(x)/Math.LN10; 
 
     // Unidades (mantemos funções caso use no futuro)
     const cmToIn = cm => cm/2.54;
@@ -76,42 +92,42 @@
     }
 
     // ===== BODYFAT (US NAVY • usando cm diretamente) =====
-// Homens:  %G = 86.010*log10(Cintura - Pescoço) - 70.041*log10(Altura) + 36.76
-// Mulheres:%G = 163.205*log10(Cintura + Quadril - Pescoço) - 97.684*log10(Altura) - 78.387
-// Todas as medidas em CENTÍMETROS. Retorna 1 casa decimal.
-function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
-  const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
+    // Homens:  %G = 86.010*log10(Cintura - Pescoço) - 70.041*log10(Altura) + 36.76
+    // Mulheres:%G = 163.205*log10(Cintura + Quadril - Pescoço) - 97.684*log10(Altura) - 78.387
+    // Todas as medidas em CENTÍMETROS. Retorna 1 casa decimal.
+    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+      const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
 
-  // precisa ter dados válidos:
-  if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) {
-    return { bf:null, fm:null, lm:null };
-  }
+      // precisa ter dados válidos:
+      if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) {
+        return { bf:null, fm:null, lm:null };
+      }
 
-  const log10 = (x) => Math.log(x) / Math.LN10;
+      const log10 = (x) => Math.log(x) / Math.LN10; // 🟢 Movendo o utilitário localmente
 
-  let bf;
-  if (sex === 'F') {
-    const x = w + q - n;
-    if (x <= 0) return { bf:null, fm:null, lm:null };
-    bf = 163.205 * log10(x) - 97.684 * log10(h) - 78.387;
-  } else {
-    const x = w - n;
-    if (x <= 0) return { bf:null, fm:null, lm:null };
-    bf = 86.010 * log10(x) - 70.041 * log10(h) + 36.76;
-  }
+      let bf;
+      if (sex === 'F') {
+        const x = w + q - n;
+        if (x <= 0) return { bf:null, fm:null, lm:null };
+        bf = 163.205 * log10(x) - 97.684 * log10(h) - 78.387;
+      } else {
+        const x = w - n;
+        if (x <= 0) return { bf:null, fm:null, lm:null };
+        bf = 86.010 * log10(x) - 70.041 * log10(h) + 36.76;
+      }
 
-  // limitar a faixa e calcular massas
-  bf = Math.min(60, Math.max(3, bf));
-  const wt = +weight || 0;
-  const fm = wt * (bf / 100);
-  const lm = wt - fm;
+      // limitar a faixa e calcular massas
+      bf = Math.min(60, Math.max(3, bf));
+      const wt = +weight || 0;
+      const fm = wt * (bf / 100);
+      const lm = wt - fm;
 
-  // 1 casa decimal conforme você espera na UI
-  const round1 = (v) => Math.round(v * 10) / 10;
-  return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
-}
+      // 1 casa decimal conforme você espera na UI
+      const round1 = (v) => Math.round(v * 10) / 10;
+      return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
+    }
 
-    // ===== STATE KEYS =====
+    // ===== STATE KEYS (Não alterado) =====
     const NS = "cardapio_v6_0";
     const PROFILE_STORAGE_KEY = `${NS}_profile`;
     const ALL_DAYS_STORAGE_KEY = `${NS}_all_days`;
@@ -123,7 +139,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
     const INITIAL_DAY_ID = 'day-1';
     const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
 
-    // ===== INPUT RULES =====
+    // ===== INPUT RULES (Não alterado) =====
     const INPUT_RANGES = {
       age: { min: 10, max: 120, step: 1 },
       weight: { min: 30, max: 300, step: 0.5 },
@@ -142,7 +158,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       return n;
     }
 
-    // ===== LOCAL STORAGE =====
+    // ===== LOCAL STORAGE (Não alterado) =====
     function loadState(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -164,7 +180,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       return saveState(nsKey(base, uid), value);
     }
 
-    // ===== DEFAULTS =====
+    // ===== DEFAULTS (Não alterado) =====
     const DEFAULT_PROFILE = {
       sex: "M", age: 33, weight: 73, height: 170,
       activity: "moderate", goal: "recomp",
@@ -224,7 +240,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       } catch { return loadState(JSON_CACHE_KEY, {items:[]}).items || []; }
     }
 
-    // ===== Web Worker de compressão (corte 1:1 @ 512px -> WEBP/JPEG) =====
+    // ===== Web Worker de compressão (corte 1:1 @ 512px -> WEBP/JPEG) - (Não alterado) =====
     const workerSrc = `
       self.onmessage = async (e) => {
         const { file } = e.data;
@@ -248,7 +264,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
     `;
     const workerURL = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
 
-    // ===== APP =====
+    // ===== APP (A lógica do App permanece inalterada, pois já estava bem estruturada) =====
     function App() {
       // ---- Estado base (namespaced por usuário)
       const uidRef = useRef('anon');
@@ -303,6 +319,9 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       useEffect(() => {
         let unsub = null;
         (async () => {
+          // 🟢 Adicionado verificação de stub para evitar erro de runtime se as chaves não forem substituídas
+          if (!window.supabase || SUPABASE_URL.includes('YOUR_')) { setAuthReady(true); return; } 
+
           const { data } = await sb.auth.getSession();
           setSession(data.session || null);
           setAuthReady(true);
@@ -557,6 +576,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
       const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
 
+      // ---- Funções de AUTH (Não alterado, mas precisam de chaves Supabase válidas)
       async function signUpPassword() {
         if (!email || !password) return alert('Preencha e-mail e senha.');
         const { error } = await sb.auth.signUp({ email, password });
@@ -595,6 +615,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         });
       }
 
+      // ---- Funções de Cloud Sync (Não alterado)
       async function loadCloud() {
         if (!session) return;
         setSyncing(true);
@@ -654,7 +675,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         return () => clearTimeout(debounceRef.current);
       }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric, hydrated]);
 
-      // ---- Foto: compressão worker + upload + salvar URL
+      // ---- Foto: compressão worker + upload + salvar URL (Não alterado)
       function getExt(name) {
         const p = (name || '').split('.');
         return (p.length > 1 ? p.pop() : 'webp').toLowerCase();
@@ -710,7 +731,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         lastSnapRef.current = snapshot();
       }
 
-      // ---- handlers perfil com pausa de autosave
+      // ---- handlers perfil com pausa de autosave (Não alterado)
       const handleProfileChangeLive = (key, value) => {
         if (isProfileLocked) return;
         setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
@@ -724,14 +745,14 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         });
       };
 
-      // ---- Favoritos
+      // ---- Favoritos (Não alterado)
       const toggleFavorite = (id) => setFavorites(prev => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id); else next.add(id);
         return next;
       });
 
-      // ---- Exportar/Importar dia
+      // ---- Exportar/Importar dia (Não alterado)
       const exportDay = () => {
         const payload = { version:"6.0", day: day, slotKeys };
         const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
@@ -759,7 +780,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
         fr.readAsText(file);
       };
 
-      // >>> LOGIN-GATE
+      // >>> LOGIN-GATE (Não alterado)
       if (authReady && !session) {
         return (
           <div className="min-h-screen flex items-center justify-center bg-[#0a0a1a] px-4">
@@ -821,7 +842,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
-                <p className="text-sm text-slate-400">v6.0 • slots com totais • toggle/reset de ingredientes • favoritos • ordenação • busca por ingrediente • unidades • exportar/importar • avatar com compressão</p>
+                <p className="text-sm text-slate-400">v6.1 • Supabase • Segurança de chaves aprimorada</p>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2 text-xs">
@@ -1243,13 +1264,13 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v6.0 — Biblioteca com favoritos/ordenação/busca em ingredientes • slots com totais • duplicar refeição • toggle/reset ingredientes • ingrediente rápido • unidades cm/kg • exportar/importar • avatar com compressão (Web Worker) • cache do JSON • autosave seguro.
+            v6.1 — Melhoria de segurança no tratamento de chaves Supabase.
           </footer>
         </div>
       );
     }
 
-    // ===== Componentes auxiliares =====
+    // ===== Componentes auxiliares (Mantidos inalterados) =====
     const MinBtn = ({ on, toggle }) => (
       <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1379,7 +1400,7 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
       );
     }
 
-    // Formulário de ingrediente rápido
+    // Formulário de ingrediente rápido (Mantido inalterado)
     function QuickAdd({ onAdd, disabled }) {
       const [name, setName] = useState("");
       const [kcal, setKcal] = useState("");
@@ -1436,4 +1457,3 @@ function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
   </script>
 </body>
 </html>
-
