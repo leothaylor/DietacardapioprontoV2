@@ -216,39 +216,44 @@
     }
 
     // ===== Supabase: inserir e deletar refeição =====
-    async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
-      const tagArray = (tags||'').split(',').map(t => t.trim()).filter(Boolean);
-      const payload = {
-        nome: name,
-        kcal: Number(kcal) || 0,
-        proteina: Number(protein) || 0,
-        carboidrato: Number(carbs) || 0,
-        gordura: Number(fats) || 0,
-        bloco: block,
-        tags: tagArray
-      };
-      const { data, error } = await sb
-        .from('refeicoes_biblioteca')
-        .insert(payload)
-        .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
-        .single();
-      if (error) return { success:false, error:error.message };
+    <script type="text/babel">
+// ...
+async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
+  const tagArray = (tags||'').split(',').map(t => t.trim()).filter(Boolean);
 
-      const item = data;
-      const meal = {
-        id: item.id, name: item.nome, block: item.bloco, tags: item.tags, created_by: item.created_by,
-        ingredients: [{ name:item.nome, baseKcal:item.kcal, protein:item.proteina, carbs:item.carboidrato, fats:item.gordura, portion:1 }]
-      };
-      return { success:true, item:meal };
-    }
-    async function deleteMealFromDB(mealId) {
-      if (!mealId) return { ok:false, error:'id inválido' };
-      if (!confirm('Excluir esta refeição definitivamente?')) return { ok:false, canceled:true };
-      const { error } = await sb.from('refeicoes_biblioteca').delete().eq('id', mealId);
-      if (error) { alert('⚠️ Erro ao excluir: ' + (error.message || 'desconhecido')); return { ok:false, error }; }
-      return { ok:true };
-    }
+  // pega o user atual
+  const { data: u } = await sb.auth.getUser();
+  const uid = u?.user?.id || null;
+  if (!uid) return { success:false, error:'É preciso estar logado para adicionar.' };
 
+  const payload = {
+    nome: name,
+    kcal: Number(kcal) || 0,
+    proteina: Number(protein) || 0,
+    carboidrato: Number(carbs) || 0,
+    gordura: Number(fats) || 0,
+    bloco: block,
+    tags: tagArray,
+    created_by: uid          // 👈 IMPORTANTE para passar na policy
+  };
+
+  const { data, error } = await sb
+    .from('refeicoes_biblioteca')
+    .insert(payload)
+    .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
+    .single();
+
+  if (error) return { success:false, error:error.message };
+
+  const item = data;
+  const meal = {
+    id: item.id, name: item.nome, block: item.bloco, tags: item.tags, created_by: item.created_by,
+    ingredients: [{ name:item.nome, baseKcal:item.kcal, protein:item.proteina, carbs:item.carboidrato, fats:item.gordura, portion:1 }]
+  };
+  return { success:true, item:meal };
+}
+// ...
+</script>
     // ===== Web Worker de compressão de foto =====
     const workerSrc = `
       self.onmessage = async (e) => {
@@ -1405,3 +1410,4 @@
   </script>
 </body>
 </html>
+
