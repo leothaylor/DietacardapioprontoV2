@@ -1241,12 +1241,12 @@ async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
                     </div>
                   }>
                   {!minLib && (
-                    <div id="biblioteca" className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                    <div id="biblioteca" className="grid grid-cols-1 gap-3 max-h-[540px] overflow-y-auto pr-2">
                       {LIB_WITH_TOTALS.map(m => (
                         <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="font-semibold text-slate-100 truncate flex items-center gap-2">
+                              <div className="font-semibold text-slate-100 flex items-center gap-2">
                                 <button onClick={()=> toggleFavorite(m.id)} title={favorites.has(m.id)?'Remover dos favoritos':'Favoritar'} className="text-amber-300">
                                   {favorites.has(m.id) ? '⭐' : '☆'}
                                 </button>
@@ -1410,4 +1410,5 @@ async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
   </script>
 </body>
 </html>
+
 
