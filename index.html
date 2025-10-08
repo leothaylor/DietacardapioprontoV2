@@ -190,7 +190,7 @@
     }
 
     // Nova função de busca via Supabase (Prioritária)
-    async function fetchExternalMealsSafe() {
+    async function fetchExternalMealsSafe({ force=false } = {}) {
       if (SUPABASE_URL.includes('YOUR_')) {
         console.warn("Chaves Supabase não configuradas. Usando apenas o arquivo local.");
         return await fetchLocalJsonFallback(true);
@@ -199,7 +199,7 @@
       try {
         const { data, error } = await sb
           .from('refeicoes_biblioteca')
-          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags')
+          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
           .order('nome', { ascending: true });
 
         if (error || !data) {
@@ -224,6 +224,7 @@
             name: it.nome || 'Item do DB',
             block,
             tags: Array.isArray(it.tags) ? it.tags : [],
+            created_by: it.created_by, // Adicionado para checar permissão de DELETE
             ingredients: [{ name: it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
           };
         });
@@ -235,7 +236,7 @@
     }
 
     // ===================================================================
-    // 🟢 NOVA FUNÇÃO SUPABASE: ADICIONAR REFEIÇÃO (v6.2)
+    // 🟢 FUNÇÃO SUPABASE: ADICIONAR REFEIÇÃO (v6.2) - HARDENING
     // ===================================================================
 
     async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
@@ -245,7 +246,8 @@
       
       const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
-      const newMeal = {
+      // ✅ Passo 3: Hardening no INSERT - Deixe 'created_by' para o trigger/RLS preencher automaticamente.
+      const payload = {
           nome: name,
           kcal: Number(kcal) || 0,
           proteina: Number(protein) || 0,
@@ -253,12 +255,13 @@
           gordura: Number(fats) || 0,
           bloco: block,
           tags: tagArray
+          // created_by é omitido aqui ou pode ser explicitamente session?.user?.id se preferir
       };
 
       const { data, error } = await sb
           .from('refeicoes_biblioteca')
-          .insert(newMeal)
-          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags')
+          .insert(payload)
+          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
           .single(); 
 
       if (error) {
@@ -273,6 +276,7 @@
             name: item.nome,
             block: item.bloco,
             tags: item.tags,
+            created_by: item.created_by, // Inclui o created_by retornado
             ingredients: [{ 
                 name: item.nome, 
                 baseKcal: item.kcal, 
@@ -284,6 +288,39 @@
       };
       
       return { success: true, item: meal };
+    }
+
+    // ===================================================================
+    // 🟢 FUNÇÃO SUPABASE: EXCLUIR REFEIÇÃO (v6.2) - NOVO
+    // ===================================================================
+    
+    async function deleteMealFromDB(mealId) {
+      if (!mealId) return { ok:false, error: 'id inválido' };
+
+      // opcional: confirmação simples
+      if (!confirm('Excluir esta refeição definitivamente?')) {
+        return { ok:false, canceled:true };
+      }
+
+      const { error } = await sb
+        .from('refeicoes_biblioteca')
+        .delete()
+        .eq('id', mealId);
+
+      if (error) {
+        console.error('Erro ao excluir refeição', error);
+        alert('⚠️ Erro ao excluir: ' + (error.message || 'desconhecido'));
+        return { ok:false, error };
+      }
+
+      // Se você mantém um cache local (ex.: meals state), remova o item aqui:
+      // setMeals(list => list.filter(m => m.id !== mealId));
+      // Ou, se você sempre refaz o fetch após mutações, apenas dispare o refresh:
+      if (typeof fetchExternalMealsSafe === 'function') {
+        await fetchExternalMealsSafe({ force: true });
+      }
+
+      return { ok:true };
     }
 
     // ===== Web Worker de compressão (Mantido) =====
@@ -378,8 +415,8 @@
       }, [session]);
 
       const [externalMeals, setExternalMeals] = useState([]);
-      useEffect(()=>{ fetchExternalMealsSafe(false).then(setExternalMeals); }, []);
-      const refreshLibrary = async ()=> setExternalMeals(await fetchExternalMealsSafe(true));
+      useEffect(()=>{ fetchExternalMealsSafe({ force: false }).then(setExternalMeals); }, []);
+      const refreshLibrary = async ()=> setExternalMeals(await fetchExternalMealsSafe({ force: true }));
 
       const [search, setSearch] = useState("");
       const [searchInIngredients, setSearchInIngredients] = useState(true);
@@ -433,7 +470,7 @@
         });
         if (orderBy === "kcal-asc") list.sort((a,b)=> a.kcal - b.kcal);
         else if (orderBy === "kcal-desc") list.sort((a,b)=> b.kcal - a.kcal);
-        else if (orderBy === "protein") list.sort((a,b)=> b.protein - a.protein);
+        else if (orderBy === "protein") list.sort((a,b)=> b.protein - b.protein);
         else if (orderBy === "most-used") list.sort((a,b)=> (b.used||0) - (a.used||0));
         return list;
       }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
@@ -988,7 +1025,7 @@
             <div className="lg:col-span-2 flex flex-col gap-6">
               
               {/* 🟢 NOVO FORMULÁRIO DE ADIÇÃO (v6.2) */}
-              <AddMealForm refreshLibrary={refreshLibrary} />
+              <AddMealForm refreshLibrary={refreshLibrary} session={session} />
 
               {/* BIBLIOTECA E MEU DIA (Organizados em duas colunas) */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1052,7 +1089,17 @@
                               <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
                             ))}
                           </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
+                          <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                            {/* Adição do botão Excluir (Passo 2B) */}
+                            {session?.user?.id && m.created_by === session.user.id && (
+                                <button
+                                  onClick={() => deleteMealFromDB(m.id).then(r => r.ok && refreshLibrary())}
+                                  className="px-2 py-1 text-xs rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                                  title="Excluir definitivamente (somente suas próprias refeições)"
+                                >
+                                  🗑️ Excluir
+                                </button>
+                              )}
                             {slotKeys.map(k => (
                               <button key={k} onClick={()=> addTo(k, m)}
                                       className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">
@@ -1170,7 +1217,7 @@
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v6.2 — Biblioteca agora totalmente dinâmica (Supabase) com formulário de inserção de novos itens.
+            v6.2 — Biblioteca agora totalmente dinâmica (Supabase) com formulário de inserção e exclusão de novos itens.
           </footer>
         </div>
       );
@@ -1356,7 +1403,7 @@
     // 🟢 NOVO COMPONENTE: FORMULÁRIO DE ADIÇÃO DE REFEIÇÃO (v6.2)
     // ===================================================================
 
-    function AddMealForm({ refreshLibrary }) {
+    function AddMealForm({ refreshLibrary, session }) {
         const [name, setName] = useState('');
         const [kcal, setKcal] = useState('');
         const [protein, setProtein] = useState('');
