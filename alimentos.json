@@ -1,3 +1,9 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/alimentos.json b/alimentos.json
+index 188bd4d80fae5e7d62f22d235d535c42f7803130..b0131e2ac1b8e2796c3ff1bb54105a1a5bf9ffc9 100644
+--- a/alimentos.json
++++ b/alimentos.json
+@@ -1,66 +1,793 @@
  {
 -  "categorias": ["High Protein", "Low Carb", "High Carb", "Balanced", "Plant-Based", "High Fat", "Post-Workout", "BR", "Night", "Quick", "Dessert", "Breakfast", "Snack"],
 +  "meta": {
@@ -853,3 +859,6 @@
 +    }
    ]
  }
+ 
+EOF
+)
