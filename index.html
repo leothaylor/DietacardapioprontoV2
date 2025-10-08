@@ -14,34 +14,35 @@
 
   <style>
     html,body{background:#0a0a1a;color:#cbd5e1}
-    /* pequenos estilos utilitários usados pelo menu "⋯" */
-    .menu{position:relative;display:inline-block}
-    .menu-content{display:none;position:absolute;right:0;top:100%;min-width:210px;
-      background:#0f172a;border:1px solid #334155;border-radius:12px;padding:6px;margin-top:6px;z-index:30}
+    /* pequenos estilos usados pelo menu ⋯ */
+    .menu{position:relative}
+    .menu .menu-content{
+      display:none; position:absolute; right:0; margin-top:.5rem;
+      background:rgba(15,23,42,.95); border:1px solid rgba(71,85,105,.6);
+      border-radius:.5rem; min-width:12rem; z-index:30; padding:.25rem;
+    }
     .menu.open .menu-content{display:block}
-    .menu-item{font-size:12px;color:#e2e8f0;padding:8px 10px;border-radius:8px;cursor:pointer}
-    .menu-item:hover{background:#1f2937}
-    .card-compact{box-shadow:0 1px 0 rgb(2 6 23 / 0.4)}
+    .menu .menu-item{
+      padding:.5rem .75rem; font-size:.875rem; color:#e2e8f0; cursor:pointer; border-radius:.375rem;
+    }
+    .menu .menu-item:hover{background:rgba(100,116,139,.25)}
+    .card-compact{box-shadow: 0 0 0 1px rgba(51,65,85,.35) inset}
+    .hide-mobile{display:none}@media(min-width:768px){.hide-mobile{display:inline-block}}
   </style>
 </head>
-
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
 
-  <script type="text/babel">
-    // ===== React hooks (globais na UMD) =====
+  <!-- TODO: todo o app dentro deste bloco -->
+  <script type="text/babel" data-presets="env,react">
+    // ==== React helpers (UMD) ====
     const { useState, useEffect, useMemo, useRef } = React;
 
-    // ===== CONFIG SUPABASE (única) =====
+    // ==== CONFIG SUPABASE ====
     const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
     const AVATAR_BUCKET = 'avatars';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // (opcional) aviso de configuração inválida
-    if (!/^https?:\/\//.test(SUPABASE_URL) || !SUPABASE_ANON_KEY) {
-      alert('⚠️ Config Supabase inválida.');
-    }
 
     // ===== UTILS / CÁLCULOS / STORAGE =====
     const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
@@ -102,7 +103,14 @@
       return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
     }
     function normalizeOnBlur(key, value) {
-      const INPUT_RANGES = { age: { min: 10, max: 120, step: 1 }, weight: { min: 30, max: 300, step: 0.5 }, height: { min: 100, max: 250, step: 1 }, neck: { min: 20, max: 60, step: 0.5 }, waist:{ min: 40, max: 150, step: 0.5 }, hip:  { min: 50, max: 150, step: 0.5 }, };
+      const INPUT_RANGES = {
+        age: { min: 10, max: 120, step: 1 },
+        weight: { min: 30, max: 300, step: 0.5 },
+        height: { min: 100, max: 250, step: 1 },
+        neck: { min: 20, max: 60, step: 0.5 },
+        waist:{ min: 40, max: 150, step: 0.5 },
+        hip:  { min: 50, max: 150, step: 0.5 },
+      };
       const r = INPUT_RANGES[key];
       let n = toNum(value);
       if (r) {
@@ -118,22 +126,32 @@
         return JSON.parse(raw);
       } catch { return fallback; }
     }
-    function saveState(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+    function saveState(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+    }
     function nsKey(base, uid) { return `${base}__${uid || 'anon'}`; }
     function loadStateNS(base, uid, fallback) { return loadState(nsKey(base, uid), fallback); }
     function saveStateNS(base, uid, value) { return saveState(nsKey(base, uid), value); }
-    const DEFAULT_PROFILE = { sex: "M", age: 33, weight: 73, height: 170, activity: "moderate", goal: "recomp", neck: 36, waist: 85, hip: 95, photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto', photoUpdatedAt: null, unitSystem: "metric" };
+    const DEFAULT_PROFILE = {
+      sex: "M", age: 33, weight: 73, height: 170, activity: "moderate", goal: "recomp",
+      neck: 36, waist: 85, hip: 95,
+      photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto',
+      photoUpdatedAt: null, unitSystem: "metric"
+    };
     const getInitialDayState = (keys) => {
       const base = keys.reduce((acc, k) => (acc[k] = [], acc), {});
       return { ...base, meta: { waterMl: 0, sleepH: 0 } };
     };
 
-    // ===== Biblioteca (Supabase prioritário, JSON como fallback) =====
+    // ===== Biblioteca: prioriza Supabase com fallback JSON local =====
     const JSON_URL = new URL('alimentos.json', location.href);
     function inferBlockByKcal(kcal) {
-      const k = Number(kcal) || 0, within = (t) => Math.abs(k - t) <= 50;
-      if (within(250)) return "250"; if (within(350)) return "350";
-      if (within(500)) return "500"; if (within(750)) return "750";
+      const k = Number(kcal) || 0;
+      const within = (t) => Math.abs(k - t) <= 50;
+      if (within(250)) return "250";
+      if (within(350)) return "350";
+      if (within(500)) return "500";
+      if (within(750)) return "750";
       return "250";
     }
     function normalizeLocalItems(data) {
@@ -162,8 +180,8 @@
         const items = normalizeLocalItems(data);
         saveState(JSON_CACHE_KEY, { ts: Date.now(), items });
         return items;
-      } catch { 
-        return loadState(JSON_CACHE_KEY, {items:[]}).items || []; 
+      } catch {
+        return loadState(JSON_CACHE_KEY, {items:[]}).items || [];
       }
     }
     async function fetchExternalMealsSafe({ force=false } = {}) {
@@ -174,7 +192,6 @@
           .order('nome', { ascending: true });
 
         if (error || !data || data.length === 0) {
-          console.warn("Supabase indisponível/sem dados. Usando fallback local.");
           return await fetchLocalJsonFallback(true);
         }
 
@@ -182,7 +199,7 @@
           const protein = Number(it.proteina) || 0;
           const carbs   = Number(it.carboidrato) || 0;
           const fats    = Number(it.gordura) || 0;
-          const kcal    = Number(it.kcal) || (protein*4 + carbs*4 + fats*9);
+          const kcal    = Number(it.kcal)    || (protein*4 + carbs*4 + fats*9);
           const block   = String(it.bloco || inferBlockByKcal(kcal)).trim();
           return {
             id: it.id || `db_${it.nome}`,
@@ -193,17 +210,14 @@
             ingredients: [{ name: it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
           };
         });
-      } catch (e) {
-        console.error("Falha Supabase, usando fallback.", e);
+      } catch {
         return await fetchLocalJsonFallback(true);
       }
     }
 
-    // ===== Mutations Supabase =====
+    // ===== Supabase: inserir e deletar refeição =====
     async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
-      const tagArray = (tags || '')
-        .split(',').map(t => t.trim()).filter(Boolean);
-
+      const tagArray = (tags||'').split(',').map(t => t.trim()).filter(Boolean);
       const payload = {
         nome: name,
         kcal: Number(kcal) || 0,
@@ -213,44 +227,29 @@
         bloco: block,
         tags: tagArray
       };
-
       const { data, error } = await sb
         .from('refeicoes_biblioteca')
         .insert(payload)
         .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
-        .single(); 
-
-      if (error) return { success: false, error: error.message };
+        .single();
+      if (error) return { success:false, error:error.message };
 
       const item = data;
       const meal = {
-        id: item.id,
-        name: item.nome,
-        block: item.bloco,
-        tags: item.tags,
-        created_by: item.created_by,
-        ingredients: [{
-          name: item.nome,
-          baseKcal: item.kcal,
-          protein: item.proteina,
-          carbs: item.carboidrato,
-          fats: item.gordura,
-          portion: 1
-        }]
+        id: item.id, name: item.nome, block: item.bloco, tags: item.tags, created_by: item.created_by,
+        ingredients: [{ name:item.nome, baseKcal:item.kcal, protein:item.proteina, carbs:item.carboidrato, fats:item.gordura, portion:1 }]
       };
-      return { success: true, item: meal };
+      return { success:true, item:meal };
     }
-
     async function deleteMealFromDB(mealId) {
-      if (!mealId) return { ok:false, error: 'id inválido' };
+      if (!mealId) return { ok:false, error:'id inválido' };
       if (!confirm('Excluir esta refeição definitivamente?')) return { ok:false, canceled:true };
-
       const { error } = await sb.from('refeicoes_biblioteca').delete().eq('id', mealId);
       if (error) { alert('⚠️ Erro ao excluir: ' + (error.message || 'desconhecido')); return { ok:false, error }; }
       return { ok:true };
     }
 
-    // ===== Worker de compressão de foto =====
+    // ===== Web Worker de compressão de foto =====
     const workerSrc = `
       self.onmessage = async (e) => {
         const { file } = e.data;
@@ -450,15 +449,15 @@
       );
     }
 
-    // ===== Formulário de adição (Supabase) =====
+    // ===== Formulário de Adição de Refeição =====
     function AddMealForm({ refreshLibrary, session }) {
       const [name, setName] = useState('');
       const [kcal, setKcal] = useState('');
       const [protein, setProtein] = useState('');
       const [carbs, setCarbs] = useState('');
       const [fats, setFats] = useState('');
-      const [block, setBlock] = useState('500'); 
-      const [tags, setTags] = useState(''); 
+      const [block, setBlock] = useState('500');
+      const [tags, setTags] = useState('');
       const [loading, setLoading] = useState(false);
 
       const isFormValid = name.trim() && (kcal || (protein || carbs || fats));
@@ -466,18 +465,21 @@
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!isFormValid) return alert('Preencha o nome e o total de Kcal, ou os macros (P/C/G).');
-        if (!session?.user?.id) alert('Aviso: Habilite a política de INSERT RLS para usuários ANÔNIMOS ou faça login.');
+
+        if (!session?.user?.id) {
+          alert('Aviso: para inserir sem login, você precisa de uma política RLS que permita INSERT a anônimos; caso contrário, faça login.');
+        }
 
         setLoading(true);
         const result = await addMealToDB({ name, kcal, protein, carbs, fats, block, tags });
         setLoading(false);
 
         if (result.success) {
-          alert(`Refeição "${result.item.name}" adicionada ao Supabase!`);
+          alert(`Refeição "${result.item.name}" adicionada!`);
           setName(''); setKcal(''); setProtein(''); setCarbs(''); setFats(''); setTags('');
           refreshLibrary();
         } else {
-          alert(`Falha ao adicionar: ${result.error}. Verifique as políticas RLS.`);
+          alert(`Falha ao adicionar: ${result.error}`);
         }
       };
 
@@ -486,6 +488,7 @@
           <form onSubmit={handleSubmit} className="flex flex-col gap-3 text-sm">
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Nome da Refeição (Obrigatório)"
                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"/>
+
             <div className="grid grid-cols-2 gap-3">
               <input type="number" value={kcal} onChange={e => setKcal(e.target.value)} placeholder="Kcal Total (Opcional se macros)"
                      className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
@@ -496,6 +499,7 @@
                 <option value="750">Bloco 750 kcal</option>
               </select>
             </div>
+
             <div className="grid grid-cols-3 gap-3">
               <input type="number" value={protein} onChange={e => setProtein(e.target.value)} placeholder="Proteína (g)"
                      className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
@@ -504,18 +508,20 @@
               <input type="number" value={fats} onChange={e => setFats(e.target.value)} placeholder="Gorduras (g)"
                      className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
             </div>
-            <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (separe por vírgulas)"
+
+            <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (separe por vírgula)"
                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
+
             <button type="submit" disabled={loading || !isFormValid}
                     className={`px-4 py-2 rounded font-semibold text-white ${loading || !isFormValid ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-              {loading ? 'Adicionando ao Banco...' : 'Adicionar à Biblioteca (Supabase)'}
+              {loading ? 'Adicionando...' : 'Adicionar à Biblioteca (Supabase)'}
             </button>
           </form>
         </Section>
       );
     }
 
-    // ===== App principal =====
+    // ===== APP =====
     function App() {
       const uidRef = useRef('anon');
       const [profile, setProfile] = useState(() => loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE));
@@ -541,14 +547,13 @@
       useEffect(()=> saveState(FAVORITES_STORAGE_KEY, Array.from(favorites)), [favorites]);
       useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
 
-      // auth
       const [session, setSession] = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
       const [syncing, setSyncing] = useState(false);
       const [typingNumeric, setTypingNumeric] = useState(false);
-      const [hydrated, setHydrated] = useState(false); 
+      const [hydrated, setHydrated] = useState(false);
       const lastSnapRef = useRef(null);
       const debounceRef = useRef(null);
 
@@ -576,7 +581,7 @@
         const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uid, {});
         setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
         setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
-        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, []))); 
+        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, [])));
         setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
       }, [session]);
 
@@ -589,7 +594,7 @@
       const [selectedBlock, setSelectedBlock] = useState("all");
       const [activeTags, setActiveTags] = useState([]);
       const [onlyFavs, setOnlyFavs] = useState(false);
-      const [orderBy, setOrderBy] = useState("relevance"); 
+      const [orderBy, setOrderBy] = useState("relevance");
       const [minProfile, setMinProfile] = useState(false);
       const [minMacros, setMinMacros] = useState(false);
       const [minLib, setMinLib] = useState(false);
@@ -635,7 +640,7 @@
         });
         if (orderBy === "kcal-asc") list.sort((a,b)=> a.kcal - b.kcal);
         else if (orderBy === "kcal-desc") list.sort((a,b)=> b.kcal - a.kcal);
-        else if (orderBy === "protein") list.sort((a,b)=> b.protein - b.protein);
+        else if (orderBy === "protein") list.sort((a,b)=> b.protein - a.protein);
         else if (orderBy === "most-used") list.sort((a,b)=> (b.used||0) - (a.used||0));
         return list;
       }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
@@ -701,8 +706,8 @@
         setUsage(u => ({ ...u, [meal.id]: (u[meal.id]||0)+1 }));
       };
 
-      const removeMeal = (slotKey, i)=> updateDay({ ...day, [slotKey]: (day[slotKey]||[]).filter((_,idx)=> idx!==i) });
-      const toggleLock = (slotKey, i)=> updateDay({ ...day, [slotKey]: (day[slotKey]||[]).map((m,idx)=> idx===i ? ({...m, isLocked:!m.isLocked}) : m) });
+      const removeMeal = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].filter((_,idx)=> idx!==i) });
+      const toggleLock = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].map((m,idx)=> idx===i ? ({...m, isLocked:!m.isLocked}) : m) });
 
       const duplicateMealTo = (fromKey, i, toKey) => {
         const m = day[fromKey][i];
@@ -712,13 +717,13 @@
 
       const updateIngredientPortion = (slotKey, i, j, por)=> updateDay({
         ...day,
-        [slotKey]: (day[slotKey]||[]).map((m,idx)=> idx!==i || m.isLocked ? m :
+        [slotKey]: day[slotKey].map((m,idx)=> idx!==i || m.isLocked ? m :
           ({...m, ingredients: m.ingredients.map((ing,k)=> k===j? {...ing, portion:Number(por)} : ing)}))
       });
 
       const toggleIngredientIncluded = (slotKey, i, j) => updateDay({
         ...day,
-        [slotKey]: (day[slotKey]||[]).map((m,idx)=> {
+        [slotKey]: day[slotKey].map((m,idx)=> {
           if (idx!==i || m.isLocked) return m;
           const next = m.ingredients.map((ing,k)=> k===j ? ({...ing, included: !(ing.included!==false)}) : ing);
           return { ...m, ingredients: next };
@@ -727,12 +732,15 @@
 
       const resetMealIngredients = (slotKey, i) => updateDay({
         ...day,
-        [slotKey]: (day[slotKey]||[]).map((m,idx)=> idx!==i ? m : ({ ...m, ingredients: deepCopy(m.originalIngredients||[]), isLocked:false }))
+        [slotKey]: day[slotKey].map((m,idx)=> {
+          if (idx!==i) return m;
+          return { ...m, ingredients: deepCopy(m.originalIngredients||[]), isLocked:false };
+        })
       });
 
       const removeIngredient = (slotKey,i,j)=> updateDay({
         ...day,
-        [slotKey]: (day[slotKey]||[]).map((m,idx)=> {
+        [slotKey]: day[slotKey].map((m,idx)=> {
           if (idx!==i || m.isLocked) return m;
           const next = m.ingredients.filter((_,k)=> k!==j);
           return next.length? {...m, ingredients:next} : {...m, ingredients:[]};
@@ -741,7 +749,10 @@
 
       const addQuickIngredient = (slotKey,i,ing) => updateDay({
         ...day,
-        [slotKey]: (day[slotKey]||[]).map((m,idx)=> (idx!==i || m.isLocked) ? m : ({ ...m, ingredients: [...m.ingredients, { ...ing, included:true }] }))
+        [slotKey]: day[slotKey].map((m,idx)=> {
+          if (idx!==i || m.isLocked) return m;
+          return { ...m, ingredients: [...m.ingredients, { ...ing, included:true }] };
+        })
       });
 
       const addSlot = ()=> {
@@ -808,6 +819,7 @@
           profile, allDays, slotKeys, currentDayId, favorites: Array.from(favorites), usage
         });
       }
+
       async function loadCloud() {
         if (!session) return;
         setSyncing(true);
@@ -816,7 +828,8 @@
         if (!data) {
           await sb.from('user_state').insert({ user_id: session.user.id, profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, favorites: Array.from(favorites), usage });
           lastSnapRef.current = snapshot();
-          setSyncing(false); setHydrated(true); return;
+          setSyncing(false); setHydrated(true);
+          return;
         }
         try {
           const p = data.profile || DEFAULT_PROFILE;
@@ -838,13 +851,13 @@
         if (!session) return;
         setSyncing(true);
         await sb.from('user_state').upsert({
-          user_id: session.user.id, profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, favorites: Array.from(favorites), usage, updated_at: new Date().toISOString()
+          user_id: session.user.id, profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
+          favorites: Array.from(favorites), usage, updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         lastSnapRef.current = snapshot();
         setSyncing(false);
       }
       useEffect(()=>{ if (session) loadCloud(); }, [session]);
-
       useEffect(() => {
         if (!session || !hydrated) return;
         if (typingNumeric) return;
@@ -855,7 +868,10 @@
         return () => clearTimeout(debounceRef.current);
       }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric, hydrated]);
 
-      function getExt(name) { const p=(name||'').split('.'); return (p.length>1?p.pop():'webp').toLowerCase(); }
+      function getExt(name) {
+        const p = (name || '').split('.');
+        return (p.length > 1 ? p.pop() : 'webp').toLowerCase();
+      }
       async function onPhoto(e){
         if (isProfileLocked) return;
         const file = e.target.files?.[0];
@@ -865,7 +881,12 @@
         const worker = new Worker(workerURL);
         const compressed = await new Promise((resolve) => {
           const t = setTimeout(()=> resolve(null), 15000);
-          worker.onmessage = (ev) => { clearTimeout(t); resolve(ev.data?.ok ? ev.data.blob : null); worker.terminate(); };
+          worker.onmessage = (ev) => {
+            clearTimeout(t);
+            if (ev.data?.ok) resolve(ev.data.blob);
+            else resolve(null);
+            worker.terminate();
+          };
           worker.postMessage({ file });
         });
 
@@ -882,11 +903,61 @@
 
         const next = { ...profile, photoUrl: publicUrl, photoUpdatedAt: Date.now() };
         setProfile(next);
-        await sb.from('user_state').upsert({ user_id: userId, profile: next, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, favorites: Array.from(favorites), usage, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+
+        await sb.from('user_state').upsert({
+          user_id: userId, profile: next, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
+          favorites: Array.from(favorites), usage, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
         lastSnapRef.current = snapshot();
       }
 
-      // Login gate
+      const handleProfileChangeLive = (key, value) => {
+        if (isProfileLocked) return;
+        setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
+        setProfile(p => ({ ...p, [key]: value }));
+      };
+      const handleProfileBlur = (key) => {
+        setTypingNumeric(false);
+        setProfile(p => {
+          if (['sex','activity','goal','photoUrl','unitSystem','photoUpdatedAt'].includes(key)) return p;
+          return { ...p, [key]: normalizeOnBlur(key, p[key]) };
+        });
+      };
+
+      const toggleFavorite = (id) => setFavorites(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+
+      const exportDay = () => {
+        const payload = { version:"6.0", day: day, slotKeys };
+        const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `cardapio_${currentDayId}.json`;
+        a.click();
+        setTimeout(()=> URL.revokeObjectURL(a.href), 1500);
+      };
+      const importInputRef = useRef(null);
+      const importDay = (file) => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          try {
+            const data = JSON.parse(fr.result);
+            if (!data?.day) throw new Error('Arquivo inválido');
+            const keys = Array.isArray(data.slotKeys) && data.slotKeys.length ? data.slotKeys : slotKeys;
+            setSlotKeys(keys);
+            updateDay(data.day);
+            alert('Dia importado com sucesso!');
+          } catch(err) {
+            alert('Falha ao importar: ' + (err?.message||''));
+          }
+        };
+        fr.readAsText(file);
+      };
+
+      // >>> LOGIN-GATE
       if (authReady && !session) {
         return (
           <div className="min-h-screen flex items-center justify-center bg-[#0a0a1a] px-4">
@@ -901,6 +972,7 @@
                        className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
                 <input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} placeholder="senha"
                        className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
+
                 <button onClick={signInPassword} className="text-sm px-3 py-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
                 <button onClick={signUpPassword} className="text-sm px-3 py-2 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10">Criar conta</button>
               </div>
@@ -912,8 +984,8 @@
           </div>
         );
       }
+      // <<< LOGIN-GATE
 
-      // Totais água/sono
       const WATER_GOAL = 3000;
       const SLEEP_GOAL = 8;
       const water = Math.max(0, day?.meta?.waterMl ?? 0);
@@ -1124,292 +1196,211 @@
               {/* Formulário de adição */}
               <AddMealForm refreshLibrary={refreshLibrary} session={session} />
 
+              {/* Biblioteca e Meu Dia */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
                 {/* BIBLIOTECA */}
-                <Library
-                  LIB_WITH_TOTALS={LIB_WITH_TOTALS}
-                  session={session}
-                  favorites={favorites}
-                  toggleFavorite={(id)=> setFavorites(prev => { const next=new Set(prev); next.has(id)?next.delete(id):next.add(id); return next; })}
-                  slotKeys={slotKeys}
-                  addTo={(k,m)=> addTo(k,m)}
-                  refreshLibrary={refreshLibrary}
-                  deleteMealFromDB={deleteMealFromDB}
-                  setSearch={setSearch}
-                  search={search}
-                  searchInIngredients={searchInIngredients}
-                  setSearchInIngredients={setSearchInIngredients}
-                  selectedBlock={selectedBlock}
-                  setSelectedBlock={setSelectedBlock}
-                  orderBy={orderBy}
-                  setOrderBy={setOrderBy}
-                  onlyFavs={onlyFavs}
-                  setOnlyFavs={setOnlyFavs}
-                  minLib={minLib}
-                  setMinLib={setMinLib}
-                />
+                <Section
+                  title="Biblioteca de Refeições"
+                  right={
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Buscar..."
+                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-40"/>
+                      <label className="text-xs flex items-center gap-1 text-slate-400">
+                        <input type="checkbox" checked={searchInIngredients} onChange={e=> setSearchInIngredients(e.target.checked)} />
+                        buscar em ingredientes
+                      </label>
+                      <select value={selectedBlock} onChange={(e)=> setSelectedBlock(e.target.value)}
+                              className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
+                        <option value="all">Todos</option>
+                        <option value="250">250</option>
+                        <option value="350">350</option>
+                        <option value="500">500</option>
+                        <option value="750">750</option>
+                      </select>
+                      <select value={orderBy} onChange={(e)=> setOrderBy(e.target.value)}
+                              className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
+                        <option value="relevance">Relevância</option>
+                        <option value="kcal-asc">kcal ↑</option>
+                        <option value="kcal-desc">kcal ↓</option>
+                        <option value="protein">Proteína ↓</option>
+                        <option value="most-used">Mais usadas</option>
+                      </select>
+                      <label className="text-xs flex items-center gap-1 text-slate-400">
+                        <input type="checkbox" checked={onlyFavs} onChange={e=> setOnlyFavs(e.target.checked)} />
+                        favoritos
+                      </label>
+                      <button onClick={refreshLibrary}
+                              className="text-xs px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Atualizar</button>
+                      <MinBtn on={minLib} toggle={()=> setMinLib(v=>!v)}/>
+                    </div>
+                  }>
+                  {!minLib && (
+                    <div id="biblioteca" className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                      {LIB_WITH_TOTALS.map(m => (
+                        <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-100 truncate flex items-center gap-2">
+                                <button onClick={()=> toggleFavorite(m.id)} title={favorites.has(m.id)?'Remover dos favoritos':'Favoritar'} className="text-amber-300">
+                                  {favorites.has(m.id) ? '⭐' : '☆'}
+                                </button>
+                                <span className="truncate">{m.name}</span>
+                              </div>
+                              <div className="text-sm text-slate-400">
+                                {round(m.kcal)} kcal • P {round(m.protein)}g • C {round(m.carbs)}g • G {round(m.fats)}g
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">{m.block} kcal</span>
+                          </div>
+                          <div className="mt-2 meal-tags flex flex-wrap gap-2">
+                            {(m.tags||[]).map(t => (
+                              <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                            {session?.user?.id && m.created_by === session.user.id && (
+                              <button
+                                onClick={() => deleteMealFromDB(m.id).then(r => r.ok && refreshLibrary())}
+                                className="px-2 py-1 text-xs rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                                title="Excluir definitivamente (somente suas próprias refeições)">
+                                🗑️ Excluir
+                              </button>
+                            )}
+                            {slotKeys.map(k => (
+                              <button key={k} onClick={()=> addTo(k, m)}
+                                      className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">
+                                + {`Refeição ${slotKeys.indexOf(k)+1}`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {LIB_WITH_TOTALS.length===0 && (
+                        <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
+                          Nenhuma refeição encontrada. Ajuste filtros/busca ou adicione dados ao Supabase.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Section>
 
                 {/* MEU DIA */}
-                <MyDay
-                  currentDayId={currentDayId}
-                  setCurrentDayId={setCurrentDayId}
-                  dayOptions={dayOptions}
-                  getDayLabel={getDayLabel}
-                  duplicateCurrentDay={duplicateCurrentDay}
-                  resetDay={resetDay}
-                  exportDay={exportDay}
-                  importDayRefCb={(ref)=> importInputRef = ref}
-                  importDay={(file)=> importDay(file)}
-                  addSlot={addSlot}
-                  slotKeys={slotKeys}
-                  minDay={minDay}
-                  setMinDay={setMinDay}
-                  day={day}
-                  slotTotals={slotTotals}
-                  getSlotLabel={getSlotLabel}
-                  removeSlot={removeSlot}
-                  round={round}
-                  resetMealIngredients={resetMealIngredients}
-                  duplicateMealTo={duplicateMealTo}
-                  toggleLock={toggleLock}
-                  removeMeal={removeMeal}
-                  updateIngredientPortion={updateIngredientPortion}
-                  toggleIngredientIncluded={toggleIngredientIncluded}
-                  removeIngredient={removeIngredient}
-                  addQuickIngredient={addQuickIngredient}
-                  WATER_GOAL={WATER_GOAL}
-                  SLEEP_GOAL={SLEEP_GOAL}
-                  water={water}
-                  sleep={sleep}
-                  waterPct={waterPct}
-                  sleepPct={sleepPct}
-                  addWater={addWater}
-                  setWater={setWater}
-                  setSleep={setSleep}
-                />
+                <Section
+                  title="Meu Dia"
+                  right={
+                    <div className="flex gap-2 flex-wrap justify-end">
+                      <select value={currentDayId} onChange={(e)=> setCurrentDayId(e.target.value)}
+                              className="bg-slate-900 border border-blue-600 rounded px-3 py-1 text-sm text-blue-300 font-semibold">
+                        {Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10))).map(id => <option key={id} value={id}>{`Dia ${Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10))).indexOf(id)+1}`}</option>)}
+                      </select>
+                      <button onClick={duplicateCurrentDay} className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40">Duplicar</button>
+                      <button onClick={resetDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40">Resetar</button>
+                      <button onClick={exportDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Exportar Dia</button>
+                      <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files[0] && importDay(e.target.files[0])}/>
+                      <button onClick={()=> importInputRef.current?.click()} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Importar Dia</button>
+                      <button onClick={addSlot} disabled={slotKeys.length>=8}
+                              className={`text-sm px-3 py-1 rounded border ${slotKeys.length>=8?'border-slate-700 text-slate-600 cursor-not-allowed':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
+                        + Refeição
+                      </button>
+                      <MinBtn on={minDay} toggle={()=> setMinDay(v=>!v)}/>
+                    </div>
+                  }>
+                  {!minDay && (
+                    <>
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                          <div className="flex items-center justify-between">
+                            <div className="text-slate-300 font-semibold">Água</div>
+                            <div className="text-xs text-slate-400">{round(water)} / {WATER_GOAL} ml</div>
+                          </div>
+                          <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
+                            <div style={{ width: `${waterPct}%` }} className="h-3 bg-emerald-500"></div>
+                          </div>
+                          <div className="mt-3 flex gap-2 flex-wrap">
+                            <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
+                            <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
+                            <button onClick={()=> addWater(750)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+750</button>
+                            <input type="number" value={water} onChange={(e)=> setWater(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
+                            <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
+                          </div>
+                        </div>
+                        <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                          <div className="flex items-center justify-between">
+                            <div className="text-slate-300 font-semibold">Sono (noite anterior)</div>
+                            <div className="text-xs text-slate-400">{round(sleep,1)} / {SLEEP_GOAL} h</div>
+                          </div>
+                          <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
+                            <div style={{ width: `${sleepPct}%` }} className="h-3 bg-indigo-500"></div>
+                          </div>
+                          <div className="mt-3 flex gap-2 flex-wrap items-center">
+                            <button onClick={()=> setSleep(Math.min(12, sleep + 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">+0,5h</button>
+                            <button onClick={()=> setSleep(Math.max(0, sleep - 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">-0,5h</button>
+                            <input type="number" step="0.5" min="0" max="12" value={sleep} onChange={(e)=> setSleep(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
+                            <button onClick={()=> setSleep(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                        {slotKeys.map(key => (
+                          <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="font-semibold text-slate-100 flex items-center gap-3">
+                                <span>{getSlotLabel(key)}</span>
+                                <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
+                                  {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
+                                </span>
+                              </div>
+                              {slotKeys.length>1 && (
+                                <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">Remover Slot</button>
+                              )}
+                            </div>
+
+                            {(!day[key] || day[key].length===0) ? (
+                              <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">Vazio — adicione refeições da biblioteca.</div>
+                            ) : (
+                              <ul className="space-y-3">
+                                {day[key].map((meal, i) => (
+                                  <MealItem key={`${key}-${i}`} slotKey={key} index={i} meal={meal}
+                                            slotKeys={slotKeys} round={round}
+                                            resetMealIngredients={resetMealIngredients}
+                                            duplicateMealTo={duplicateMealTo}
+                                            toggleLock={toggleLock}
+                                            removeMeal={removeMeal}
+                                            updateIngredientPortion={updateIngredientPortion}
+                                            toggleIngredientIncluded={toggleIngredientIncluded}
+                                            removeIngredient={removeIngredient}
+                                            addQuickIngredient={addQuickIngredient}
+                                            getSlotLabel={getSlotLabel}/>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
+                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Calorias</div><div className="text-xl font-bold">{round(totals.kcal)}</div></div>
+                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Proteínas</div><div className="text-xl font-bold">{round(totals.protein)} g</div></div>
+                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Carboidratos</div><div className="text-xl font-bold">{round(totals.carbs)} g</div></div>
+                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Gorduras</div><div className="text-xl font-bold">{round(totals.fats)} g</div></div>
+                      </div>
+                    </>
+                  )}
+                </Section>
               </div>
             </div>
           </main>
 
           <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v6.2 — Biblioteca dinâmica (Supabase) com formulário de inserção e exclusão de itens.
+            v6.2 — Biblioteca dinâmica (Supabase) com inserir/excluir e sincronização de estado na nuvem.
           </footer>
         </div>
       );
     }
 
-    // ===== Subcomponentes de layout para deixar o App mais legível =====
-    function Library(props){
-      const {
-        LIB_WITH_TOTALS, session, favorites, toggleFavorite, slotKeys, addTo,
-        refreshLibrary, deleteMealFromDB, setSearch, search, searchInIngredients,
-        setSearchInIngredients, selectedBlock, setSelectedBlock, orderBy, setOrderBy,
-        onlyFavs, setOnlyFavs, minLib, setMinLib
-      } = props;
-
-      return (
-        <Section
-          title="Biblioteca de Refeições"
-          right={
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Buscar..."
-                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-40"/>
-              <label className="text-xs flex items-center gap-1 text-slate-400">
-                <input type="checkbox" checked={searchInIngredients} onChange={e=> setSearchInIngredients(e.target.checked)} />
-                buscar em ingredientes
-              </label>
-              <select value={selectedBlock} onChange={(e)=> setSelectedBlock(e.target.value)}
-                      className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
-                <option value="all">Todos</option>
-                <option value="250">250</option>
-                <option value="350">350</option>
-                <option value="500">500</option>
-                <option value="750">750</option>
-              </select>
-              <select value={orderBy} onChange={(e)=> setOrderBy(e.target.value)}
-                      className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
-                <option value="relevance">Relevância</option>
-                <option value="kcal-asc">kcal ↑</option>
-                <option value="kcal-desc">kcal ↓</option>
-                <option value="protein">Proteína ↓</option>
-                <option value="most-used">Mais usadas</option>
-              </select>
-              <label className="text-xs flex items-center gap-1 text-slate-400">
-                <input type="checkbox" checked={onlyFavs} onChange={e=> setOnlyFavs(e.target.checked)} />
-                favoritos
-              </label>
-              <button onClick={refreshLibrary}
-                      className="text-xs px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Atualizar</button>
-              <MinBtn on={minLib} toggle={()=> setMinLib(v=>!v)}/>
-            </div>
-          }>
-          {!minLib && (
-            <div id="biblioteca" className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
-              {LIB_WITH_TOTALS.map(m => (
-                <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-slate-100 truncate flex items-center gap-2">
-                        <button onClick={()=> toggleFavorite(m.id)} title={favorites.has(m.id)?'Remover dos favoritos':'Favoritar'} className="text-amber-300">
-                          {favorites.has(m.id) ? '⭐' : '☆'}
-                        </button>
-                        <span className="truncate">{m.name}</span>
-                      </div>
-                      <div className="text-sm text-slate-400">
-                        {round(m.kcal)} kcal • P {round(m.protein)}g • C {round(m.carbs)}g • G {round(m.fats)}g
-                      </div>
-                    </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">{m.block} kcal</span>
-                  </div>
-                  <div className="mt-2 meal-tags flex flex-wrap gap-2">
-                    {(m.tags||[]).map(t => (
-                      <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 justify-end">
-                    {session?.user?.id && m.created_by === session.user.id && (
-                      <button
-                        onClick={() => deleteMealFromDB(m.id).then(r => r.ok && refreshLibrary())}
-                        className="px-2 py-1 text-xs rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10"
-                        title="Excluir definitivamente (somente suas próprias refeições)">
-                        🗑️ Excluir
-                      </button>
-                    )}
-                    {slotKeys.map(k => (
-                      <button key={k} onClick={()=> addTo(k, m)}
-                              className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">
-                        + {`Refeição ${slotKeys.indexOf(k)+1}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {LIB_WITH_TOTALS.length===0 && (
-                <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                  Nenhuma refeição encontrada. Ajuste filtros/busca ou adicione dados ao Supabase.
-                </div>
-              )}
-            </div>
-          )}
-        </Section>
-      );
-    }
-
-    let importInputRef = null;
-    function MyDay(props){
-      const {
-        currentDayId, setCurrentDayId, dayOptions, getDayLabel,
-        duplicateCurrentDay, resetDay, exportDay, importDayRefCb, importDay,
-        addSlot, slotKeys, minDay, setMinDay, day, slotTotals, getSlotLabel,
-        removeSlot, round, resetMealIngredients, duplicateMealTo, toggleLock,
-        removeMeal, updateIngredientPortion, toggleIngredientIncluded, removeIngredient, addQuickIngredient,
-        WATER_GOAL, SLEEP_GOAL, water, sleep, waterPct, sleepPct, addWater, setWater, setSleep
-      } = props;
-
-      useEffect(()=> { if (!importInputRef) importInputRef = { current: null }; importDayRefCb(importInputRef); }, []);
-
-      return (
-        <Section
-          title="Meu Dia"
-          right={
-            <div className="flex gap-2 flex-wrap justify-end">
-              <select value={currentDayId} onChange={(e)=> setCurrentDayId(e.target.value)}
-                      className="bg-slate-900 border border-blue-600 rounded px-3 py-1 text-sm text-blue-300 font-semibold">
-                {dayOptions.map(id => <option key={id} value={id}>{getDayLabel(id)}</option>)}
-              </select>
-              <button onClick={duplicateCurrentDay} className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40">Duplicar</button>
-              <button onClick={resetDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40">Resetar</button>
-              <button onClick={exportDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Exportar Dia</button>
-              <input ref={(el)=> (importInputRef.current = el)} type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files[0] && importDay(e.target.files[0])}/>
-              <button onClick={()=> importInputRef.current?.click()} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Importar Dia</button>
-              <button onClick={addSlot} disabled={slotKeys.length>=8}
-                      className={`text-sm px-3 py-1 rounded border ${slotKeys.length>=8?'border-slate-700 text-slate-600 cursor-not-allowed':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
-                + Refeição
-              </button>
-              <MinBtn on={minDay} toggle={()=> setMinDay(v=>!v)}/>
-            </div>
-          }>
-          {!minDay && (
-            <>
-              <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                  <div className="flex items-center justify-between">
-                    <div className="text-slate-300 font-semibold">Água</div>
-                    <div className="text-xs text-slate-400">{round(water)} / {WATER_GOAL} ml</div>
-                  </div>
-                  <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
-                    <div style={{ width: `${waterPct}%` }} className="h-3 bg-emerald-500"></div>
-                  </div>
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
-                    <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
-                    <button onClick={()=> addWater(750)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+750</button>
-                    <input type="number" value={water} onChange={(e)=> setWater(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
-                    <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                  <div className="flex items-center justify-between">
-                    <div className="text-slate-300 font-semibold">Sono (noite anterior)</div>
-                    <div className="text-xs text-slate-400">{round(sleep,1)} / {SLEEP_GOAL} h</div>
-                  </div>
-                  <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
-                    <div style={{ width: `${sleepPct}%` }} className="h-3 bg-indigo-500"></div>
-                  </div>
-                  <div className="mt-3 flex gap-2 flex-wrap items-center">
-                    <button onClick={()=> setSleep(Math.min(12, sleep + 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">+0,5h</button>
-                    <button onClick={()=> setSleep(Math.max(0, sleep - 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">-0,5h</button>
-                    <input type="number" step="0.5" min="0" max="12" value={sleep} onChange={(e)=> setSleep(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
-                    <button onClick={()=> setSleep(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-                  </div>
-                </div>
-              </div>
-
-              <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
-                {slotKeys.map(key => (
-                  <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="font-semibold text-slate-100 flex items-center gap-3">
-                        <span>{getSlotLabel(key)}</span>
-                        <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
-                          {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
-                        </span>
-                      </div>
-                      {slotKeys.length>1 && (
-                        <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">Remover Slot</button>
-                      )}
-                    </div>
-
-                    {(!day[key] || day[key].length===0) ? (
-                      <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">Vazio — adicione refeições da biblioteca.</div>
-                    ) : (
-                      <ul className="space-y-3">
-                        {day[key].map((meal, i) => (
-                          <MealItem key={`${key}-${i}`} slotKey={key} index={i} meal={meal} slotKeys={slotKeys} round={round}
-                            resetMealIngredients={resetMealIngredients} duplicateMealTo={duplicateMealTo} toggleLock={toggleLock}
-                            removeMeal={removeMeal} updateIngredientPortion={updateIngredientPortion} toggleIngredientIncluded={toggleIngredientIncluded}
-                            removeIngredient={removeIngredient} addQuickIngredient={addQuickIngredient} getSlotLabel={getSlotLabel}/>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
-                <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Calorias</div><div className="text-xl font-bold">{round(totals.kcal)}</div></div>
-                <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Proteínas</div><div className="text-xl font-bold">{round(totals.protein)} g</div></div>
-                <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Carboidratos</div><div className="text-xl font-bold">{round(totals.carbs)} g</div></div>
-                <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Gorduras</div><div className="text-xl font-bold">{round(totals.fats)} g</div></div>
-              </div>
-            </>
-          )}
-        </Section>
-      );
-    }
-
-    // ===== Render =====
+    // ==== Montagem ====
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
