@@ -31,14 +31,12 @@
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useMemo, useEffect, useRef } = React;
-
-    // ===================================================================
-    // ⚠️ 🟢 CONFIGURAÇÃO SUPABASE (v6.2) - SUBSTITUA ESTAS CHAVES
-    // ===================================================================
-    const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
-    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'; 
+  <!-- CONFIG SUPABASE -->
+<script type="text/babel">
+  const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
+  // (o restante do seu script permanece igual)
+</script>
     
     if (SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON_KEY.includes('YOUR_')) {
       alert("⚠️ ERRO DE CONFIGURAÇÃO: Por favor, substitua 'YOUR_SUPABASE_URL' e 'YOUR_ANON_KEY' no código. O app não funcionará sem as credenciais Supabase.");
@@ -1481,3 +1479,4 @@
   </script>
 </body>
 </html>
+
