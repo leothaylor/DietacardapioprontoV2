@@ -1,1478 +1,2414 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cardápio Inteligente (v6.2)</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cardápio Inteligente (v6.3)</title>
 
-  <!-- libs -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Bibliotecas -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <style>
-    html,body{background:#0a0a1a;color:#cbd5e1}
-    /* pequenos estilos usados pelo menu ⋯ */
-    .menu{position:relative}
-    .menu .menu-content{
-      display:none; position:absolute; right:0; margin-top:.5rem;
-      background:rgba(15,23,42,.95); border:1px solid rgba(71,85,105,.6);
-      border-radius:.5rem; min-width:12rem; z-index:30; padding:.25rem;
-    }
-    .menu.open .menu-content{display:block}
-    .menu .menu-item{
-      padding:.5rem .75rem; font-size:.875rem; color:#e2e8f0; cursor:pointer; border-radius:.375rem;
-    }
-    .menu .menu-item:hover{background:rgba(100,116,139,.25)}
-    .card-compact{box-shadow: 0 0 0 1px rgba(51,65,85,.35) inset}
-    .hide-mobile{display:none}@media(min-width:768px){.hide-mobile{display:inline-block}}
-  </style>
-</head>
-<body class="bg-[#0a0a1a] text-slate-200">
-  <div id="root"></div>
-
-  <!-- TODO: todo o app dentro deste bloco -->
-  <script type="text/babel" data-presets="env,react">
-    // ==== React helpers (UMD) ====
-    const { useState, useEffect, useMemo, useRef } = React;
-
-    // ==== CONFIG SUPABASE ====
-    const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
-    const AVATAR_BUCKET = 'avatars';
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // ===== UTILS / CÁLCULOS / STORAGE =====
-    const KCAL_PER_G = { protein: 4, carbs: 4, fats: 9 };
-    const round = (n, d = 0) => Math.round(n * 10**d) / 10**d;
-    const toNum = v => Number.isFinite(+v) ? +v : 0;
-
-    const NS = "cardapio_v6_0";
-    const PROFILE_STORAGE_KEY = `${NS}_profile`;
-    const ALL_DAYS_STORAGE_KEY = `${NS}_all_days`;
-    const SLOTS_STORAGE_KEY = `${NS}_slotkeys`;
-    const CURRENT_DAY_ID_STORAGE_KEY = `${NS}_current_day_id`;
-    const FAVORITES_STORAGE_KEY = `${NS}_favorites`;
-    const USAGE_STORAGE_KEY = `${NS}_usage`;
-    const JSON_CACHE_KEY = `${NS}_lib_cache`;
-    const INITIAL_DAY_ID = 'day-1';
-    const INITIAL_SLOT_KEYS = ['slot-1','slot-2','slot-3','slot-4'];
-
-    function calcBMR({ sex, weight, height, age }) {
-      const s = sex === "F" ? -161 : 5;
-      return 10 * weight + 6.25 * height - 5 * age + s;
-    }
-    function calcTDEE(bmr, activity) {
-      const f = { sedentary:1.2, light:1.375, moderate:1.55, active:1.725, very:1.9 };
-      return bmr * (f[activity] || 1.55);
-    }
-    function adjustForGoal(tdee, goal) {
-      if (goal === "loss") return tdee * 0.85;
-      if (goal === "gain") return tdee * 1.10;
-      if (goal === "recomp") return tdee * 0.95;
-      return tdee;
-    }
-    function deriveMacroTargets({ weight, calories }) {
-      const protein = 1.8 * weight;
-      const fat = 0.8 * weight;
-      const kcalP = protein * KCAL_PER_G.protein;
-      const kcalF = fat * KCAL_PER_G.fats;
-      const kcalC = Math.max(0, calories - kcalP - kcalF);
-      const carbs = kcalC / KCAL_PER_G.carbs;
-      return { protein: round(protein), fats: round(fat), carbs: round(carbs) };
-    }
-    function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
-      const h = +height || 0, n = +neck || 0, w = +waist || 0, q = +hip || 0;
-      if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) return { bf:null, fm:null, lm:null };
-      const log10 = (x) => Math.log(x) / Math.LN10;
-      let bf;
-      if (sex === 'F') {
-        const x = w + q - n; if (x <= 0) return { bf:null, fm:null, lm:null };
-        bf = 163.205 * log10(x) - 97.684 * log10(h) - 78.387;
-      } else {
-        const x = w - n; if (x <= 0) return { bf:null, fm:null, lm:null };
-        bf = 86.010 * log10(x) - 70.041 * log10(h) + 36.76;
+    <style>
+      :root {
+        color-scheme: dark;
       }
-      bf = Math.min(60, Math.max(3, bf));
-      const wt = +weight || 0;
-      const fm = wt * (bf / 100);
-      const lm = wt - fm;
-      const round1 = (v) => Math.round(v * 10) / 10;
-      return { bf: round1(bf), fm: round1(fm), lm: round1(lm) };
-    }
-    function normalizeOnBlur(key, value) {
-      const INPUT_RANGES = {
-        age: { min: 10, max: 120, step: 1 },
-        weight: { min: 30, max: 300, step: 0.5 },
-        height: { min: 100, max: 250, step: 1 },
-        neck: { min: 20, max: 60, step: 0.5 },
-        waist:{ min: 40, max: 150, step: 0.5 },
-        hip:  { min: 50, max: 150, step: 0.5 },
+
+      html,
+      body {
+        background: #050615;
+        color: #cbd5f5;
+      }
+
+      .menu {
+        position: relative;
+      }
+
+      .menu .menu-content {
+        display: none;
+        position: absolute;
+        right: 0;
+        margin-top: 0.5rem;
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid rgba(71, 85, 105, 0.6);
+        border-radius: 0.75rem;
+        min-width: 12rem;
+        z-index: 30;
+        padding: 0.25rem;
+      }
+
+      .menu.open .menu-content {
+        display: block;
+      }
+
+      .menu .menu-item {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        color: #e2e8f0;
+        cursor: pointer;
+        border-radius: 0.375rem;
+      }
+
+      .menu .menu-item:hover {
+        background: rgba(100, 116, 139, 0.25);
+      }
+
+      .card-compact {
+        box-shadow: 0 0 0 1px rgba(51, 65, 85, 0.35) inset;
+      }
+
+      .hide-mobile {
+        display: none;
+      }
+
+      @media (min-width: 768px) {
+        .hide-mobile {
+          display: inline-block;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-[#050615] text-slate-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="env,react">
+      const { useState, useEffect, useMemo, useRef } = React;
+
+      // ---------------------------------------------------------------------
+      // Supabase
+      // ---------------------------------------------------------------------
+      const SUPABASE_CONFIG = {
+        url: 'https://grnwskvvbglclnijbgdq.supabase.co',
+        anonKey:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxaSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzU5ODAwODkxLCJleHAiOjIwNzUzNzY4OTF9.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM',
+        avatarBucket: 'avatars',
       };
-      const r = INPUT_RANGES[key];
-      let n = toNum(value);
-      if (r) {
-        if (n !== 0 && n < r.min) n = r.min;
-        if (n > r.max) n = r.max;
-      }
-      return n;
-    }
-    function loadState(key, fallback) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (raw === null || raw === "undefined") return fallback;
-        return JSON.parse(raw);
-      } catch { return fallback; }
-    }
-    function saveState(key, value) {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-    }
-    function nsKey(base, uid) { return `${base}__${uid || 'anon'}`; }
-    function loadStateNS(base, uid, fallback) { return loadState(nsKey(base, uid), fallback); }
-    function saveStateNS(base, uid, value) { return saveState(nsKey(base, uid), value); }
-    const DEFAULT_PROFILE = {
-      sex: "M", age: 33, weight: 73, height: 170, activity: "moderate", goal: "recomp",
-      neck: 36, waist: 85, hip: 95,
-      photoUrl: 'https://placehold.co/100x100/1E293B/E2E8F0?text=Foto',
-      photoUpdatedAt: null, unitSystem: "metric"
-    };
-    const getInitialDayState = (keys) => {
-      const base = keys.reduce((acc, k) => (acc[k] = [], acc), {});
-      return { ...base, meta: { waterMl: 0, sleepH: 0 } };
-    };
 
-    // ===== Biblioteca: prioriza Supabase com fallback JSON local =====
-    const JSON_URL = new URL('alimentos.json', location.href);
-    function inferBlockByKcal(kcal) {
-      const k = Number(kcal) || 0;
-      const within = (t) => Math.abs(k - t) <= 50;
-      if (within(250)) return "250";
-      if (within(350)) return "350";
-      if (within(500)) return "500";
-      if (within(750)) return "750";
-      return "250";
-    }
-    function normalizeLocalItems(data) {
-      if (!data || !Array.isArray(data.items)) return [];
-      return data.items.map((it, i) => {
-        const protein = Number(it.protein) || 0;
-        const carbs   = Number(it.carbs)   || 0;
-        const fats    = Number(it.fats)    || 0;
-        const kcal    = Number(it.kcal)    || (protein*4 + carbs*4 + fats*9);
-        const block   = (it.block != null && it.block !== "") ? String(it.block).trim() : inferBlockByKcal(kcal);
-        return {
-          id: it.id || `ext_${i}`, name: it.name || it.nome || 'Item', block,
-          tags: Array.isArray(it.tags) ? it.tags : [],
-          ingredients: [{ name: it.name || it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
+      const supabase = window.supabase.createClient(
+        SUPABASE_CONFIG.url,
+        SUPABASE_CONFIG.anonKey,
+      );
+
+      async function addMealToDatabase({
+        name,
+        kcal,
+        protein,
+        carbs,
+        fats,
+        block,
+        tags,
+      }) {
+        const { data } = await supabase.auth.getUser();
+        const userId = data?.user?.id;
+
+        if (!userId) {
+          return { success: false, error: 'É preciso estar logado para adicionar.' };
+        }
+
+        const tagArray = (tags || '')
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        const payload = {
+          nome: name,
+          kcal: Number(kcal) || 0,
+          proteina: Number(protein) || 0,
+          carboidrato: Number(carbs) || 0,
+          gordura: Number(fats) || 0,
+          bloco: block,
+          tags: tagArray,
+          created_by: userId,
         };
-      });
-    }
-    async function fetchLocalJsonFallback(force=false) {
-      try {
-        const cache = loadState(JSON_CACHE_KEY, null);
-        if (!force && cache?.ts && cache?.items) return cache.items;
-        const u = new URL(JSON_URL); u.searchParams.set('_', Date.now());
-        const res = await fetch(u, { cache: 'no-store' });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const items = normalizeLocalItems(data);
-        saveState(JSON_CACHE_KEY, { ts: Date.now(), items });
-        return items;
-      } catch {
-        return loadState(JSON_CACHE_KEY, {items:[]}).items || [];
-      }
-    }
-    async function fetchExternalMealsSafe({ force=false } = {}) {
-      try {
-        const { data, error } = await sb
+
+        const { data: insertData, error } = await supabase
           .from('refeicoes_biblioteca')
-          .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
+          .insert(payload)
+          .select(
+            'id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by',
+          )
+          .single();
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        return {
+          success: true,
+          item: {
+            id: insertData.id,
+            name: insertData.nome,
+            block: insertData.bloco,
+            tags: insertData.tags,
+            created_by: insertData.created_by,
+            ingredients: [
+              {
+                name: insertData.nome,
+                baseKcal: insertData.kcal,
+                protein: insertData.proteina,
+                carbs: insertData.carboidrato,
+                fats: insertData.gordura,
+                portion: 1,
+              },
+            ],
+          },
+        };
+      }
+
+      async function deleteMealFromDatabase(id) {
+        if (!id) {
+          return { ok: false, error: 'ID inválido.' };
+        }
+
+        const { data } = await supabase.auth.getUser();
+        const userId = data?.user?.id;
+
+        if (!userId) {
+          return { ok: false, error: 'É preciso estar logado para excluir.' };
+        }
+
+        const { error } = await supabase
+          .from('refeicoes_biblioteca')
+          .delete()
+          .eq('id', id)
+          .eq('created_by', userId);
+
+        if (error) {
+          return { ok: false, error: error.message };
+        }
+
+        return { ok: true };
+      }
+
+      async function fetchSupabaseMeals() {
+        const { data, error } = await supabase
+          .from('refeicoes_biblioteca')
+          .select(
+            'id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by',
+          )
           .order('nome', { ascending: true });
 
-        if (error || !data || data.length === 0) {
+        if (error || !data?.length) {
+          return null;
+        }
+
+        return data.map((item) => {
+          const protein = Number(item.proteina) || 0;
+          const carbs = Number(item.carboidrato) || 0;
+          const fats = Number(item.gordura) || 0;
+          const kcal = Number(item.kcal) || protein * 4 + carbs * 4 + fats * 9;
+
+          return {
+            id: item.id,
+            name: item.nome || 'Refeição',
+            block: `${item.bloco ?? inferBlockByKcal(kcal)}`,
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            created_by: item.created_by,
+            ingredients: [
+              {
+                name: item.nome || 'Refeição',
+                baseKcal: kcal,
+                protein,
+                carbs,
+                fats,
+                portion: 1,
+              },
+            ],
+          };
+        });
+      }
+
+      // ---------------------------------------------------------------------
+      // Utils / cálculos / storage
+      // ---------------------------------------------------------------------
+      const KCAL_PER_GRAM = { protein: 4, carbs: 4, fats: 9 };
+      const STORAGE_NAMESPACE = 'cardapio_v6_0';
+      const STORAGE_KEYS = {
+        profile: `${STORAGE_NAMESPACE}_profile`,
+        allDays: `${STORAGE_NAMESPACE}_all_days`,
+        slotKeys: `${STORAGE_NAMESPACE}_slotkeys`,
+        currentDayId: `${STORAGE_NAMESPACE}_current_day_id`,
+        favorites: `${STORAGE_NAMESPACE}_favorites`,
+        usage: `${STORAGE_NAMESPACE}_usage`,
+        jsonCache: `${STORAGE_NAMESPACE}_lib_cache`,
+      };
+      const INITIAL_SLOT_KEYS = ['slot-1', 'slot-2', 'slot-3', 'slot-4'];
+      const INITIAL_DAY_ID = 'day-1';
+
+      const DEFAULT_PROFILE = {
+        sex: 'M',
+        age: 33,
+        weight: 73,
+        height: 170,
+        activity: 'moderate',
+        goal: 'recomp',
+        neck: 36,
+        waist: 85,
+        hip: 95,
+        photoUrl: 'https://placehold.co/120x120/1E293B/E2E8F0?text=Foto',
+        photoUpdatedAt: null,
+        unitSystem: 'metric',
+      };
+
+      const round = (value, digits = 0) =>
+        Math.round(value * 10 ** digits) / 10 ** digits;
+      const toNumber = (value) => (Number.isFinite(+value) ? +value : 0);
+
+      function nsKey(base, uid) {
+        return `${base}__${uid || 'anon'}`;
+      }
+
+      function loadState(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw === null || raw === 'undefined') return fallback;
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn('loadState failed', error);
+          return fallback;
+        }
+      }
+
+      function saveState(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+          console.warn('saveState failed', error);
+        }
+      }
+
+      const loadStateNS = (base, uid, fallback) =>
+        loadState(nsKey(base, uid), fallback);
+      const saveStateNS = (base, uid, value) =>
+        saveState(nsKey(base, uid), value);
+
+      function createInitialDayState(keys) {
+        const base = keys.reduce((acc, key) => ({ ...acc, [key]: [] }), {});
+        return { ...base, meta: { waterMl: 0, sleepH: 0 } };
+      }
+
+      function calcBMR({ sex, weight, height, age }) {
+        const sexOffset = sex === 'F' ? -161 : 5;
+        return 10 * weight + 6.25 * height - 5 * age + sexOffset;
+      }
+
+      function calcTDEE(bmr, activity) {
+        const map = {
+          sedentary: 1.2,
+          light: 1.375,
+          moderate: 1.55,
+          active: 1.725,
+          very: 1.9,
+        };
+
+        return bmr * (map[activity] || 1.55);
+      }
+
+      function adjustForGoal(tdee, goal) {
+        if (goal === 'loss') return tdee * 0.85;
+        if (goal === 'gain') return tdee * 1.1;
+        if (goal === 'recomp') return tdee * 0.95;
+        return tdee;
+      }
+
+      function deriveMacroTargets({ weight, calories }) {
+        const protein = 1.8 * weight;
+        const fat = 0.8 * weight;
+        const kcalProtein = protein * KCAL_PER_GRAM.protein;
+        const kcalFat = fat * KCAL_PER_GRAM.fats;
+        const kcalCarbs = Math.max(0, calories - kcalProtein - kcalFat);
+        const carbs = kcalCarbs / KCAL_PER_GRAM.carbs;
+
+        return {
+          protein: round(protein),
+          fats: round(fat),
+          carbs: round(carbs),
+        };
+      }
+
+      function calcBodyFat({ sex, height, neck, waist, hip, weight }) {
+        const h = +height || 0;
+        const n = +neck || 0;
+        const w = +waist || 0;
+        const q = +hip || 0;
+
+        if (h <= 0 || n <= 0 || w <= 0 || (sex === 'F' && q <= 0)) {
+          return { bf: null, fm: null, lm: null };
+        }
+
+        const log10 = (value) => Math.log(value) / Math.LN10;
+        let bf;
+
+        if (sex === 'F') {
+          const x = w + q - n;
+          if (x <= 0) return { bf: null, fm: null, lm: null };
+          bf = 163.205 * log10(x) - 97.684 * log10(h) - 78.387;
+        } else {
+          const x = w - n;
+          if (x <= 0) return { bf: null, fm: null, lm: null };
+          bf = 86.01 * log10(x) - 70.041 * log10(h) + 36.76;
+        }
+
+        bf = Math.min(60, Math.max(3, bf));
+        const fatMass = weight * (bf / 100);
+        const leanMass = weight - fatMass;
+
+        const round1 = (value) => Math.round(value * 10) / 10;
+        return { bf: round1(bf), fm: round1(fatMass), lm: round1(leanMass) };
+      }
+
+      function normalizeOnBlur(key, value) {
+        const ranges = {
+          age: { min: 10, max: 120, step: 1 },
+          weight: { min: 30, max: 300, step: 0.5 },
+          height: { min: 100, max: 250, step: 1 },
+          neck: { min: 20, max: 60, step: 0.5 },
+          waist: { min: 40, max: 150, step: 0.5 },
+          hip: { min: 50, max: 150, step: 0.5 },
+        };
+
+        const range = ranges[key];
+        let number = toNumber(value);
+
+        if (range) {
+          if (number !== 0 && number < range.min) number = range.min;
+          if (number > range.max) number = range.max;
+        }
+
+        return number;
+      }
+
+      const JSON_FALLBACK_URL = new URL('alimentos.json', location.href);
+
+      function inferBlockByKcal(kcal) {
+        const value = Number(kcal) || 0;
+        const within = (target) => Math.abs(value - target) <= 50;
+        if (within(250)) return '250';
+        if (within(350)) return '350';
+        if (within(500)) return '500';
+        if (within(750)) return '750';
+        return '250';
+      }
+
+      function normalizeLocalItems(data) {
+        if (!data || !Array.isArray(data.items)) return [];
+
+        return data.items.map((item, index) => {
+          const protein = Number(item.protein) || 0;
+          const carbs = Number(item.carbs) || 0;
+          const fats = Number(item.fats) || 0;
+          const kcal = Number(item.kcal) || protein * 4 + carbs * 4 + fats * 9;
+          const block =
+            item.block !== undefined && item.block !== ''
+              ? String(item.block).trim()
+              : inferBlockByKcal(kcal);
+
+          return {
+            id: item.id || `ext_${index}`,
+            name: item.name || item.nome || 'Item',
+            block,
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            ingredients: [
+              {
+                name: item.name || item.nome || 'Item',
+                baseKcal: kcal,
+                protein,
+                carbs,
+                fats,
+                portion: 1,
+              },
+            ],
+          };
+        });
+      }
+
+      async function fetchLocalJsonFallback(force = false) {
+        try {
+          const cache = loadState(STORAGE_KEYS.jsonCache, null);
+          if (!force && cache?.ts && cache?.items) return cache.items;
+
+          const url = new URL(JSON_FALLBACK_URL);
+          url.searchParams.set('_', Date.now());
+
+          const response = await fetch(url, { cache: 'no-store' });
+          if (!response.ok) throw new Error('response not ok');
+
+          const payload = await response.json();
+          const items = normalizeLocalItems(payload);
+          saveState(STORAGE_KEYS.jsonCache, { ts: Date.now(), items });
+          return items;
+        } catch (error) {
+          console.warn('fetchLocalJsonFallback', error);
+          return loadState(STORAGE_KEYS.jsonCache, { items: [] }).items || [];
+        }
+      }
+
+      async function fetchExternalMeals({ force = false } = {}) {
+        try {
+          const remote = await fetchSupabaseMeals();
+          if (!remote || force) {
+            return await fetchLocalJsonFallback(true);
+          }
+
+          return remote;
+        } catch (error) {
+          console.warn('fetchExternalMeals', error);
           return await fetchLocalJsonFallback(true);
         }
+      }
 
-        return data.map(it => {
-          const protein = Number(it.proteina) || 0;
-          const carbs   = Number(it.carboidrato) || 0;
-          const fats    = Number(it.gordura) || 0;
-          const kcal    = Number(it.kcal)    || (protein*4 + carbs*4 + fats*9);
-          const block   = String(it.bloco || inferBlockByKcal(kcal)).trim();
-          return {
-            id: it.id || `db_${it.nome}`,
-            name: it.nome || 'Item do DB',
-            block,
-            tags: Array.isArray(it.tags) ? it.tags : [],
-            created_by: it.created_by,
-            ingredients: [{ name: it.nome || 'Item', baseKcal: kcal, protein, carbs, fats, portion: 1 }]
+      // ---------------------------------------------------------------------
+      // Web Worker para compressão de imagem
+      // ---------------------------------------------------------------------
+      function createCompressionWorkerURL() {
+        const workerSrc = `
+          self.onmessage = async (event) => {
+            const { file } = event.data;
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const blob = new Blob([arrayBuffer]);
+              const bitmap = await createImageBitmap(blob);
+              const size = 512;
+              const minSide = Math.min(bitmap.width, bitmap.height);
+              const sx = Math.floor((bitmap.width - minSide) / 2);
+              const sy = Math.floor((bitmap.height - minSide) / 2);
+              const canvas = new OffscreenCanvas(size, size);
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(bitmap, sx, sy, minSide, minSide, 0, 0, size, size);
+              const webp = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
+              self.postMessage({ ok: true, blob: webp }, [webp]);
+            } catch (error) {
+              self.postMessage({ ok: false, error: error?.message || 'compress-failed' });
+            }
           };
-        });
-      } catch {
-        return await fetchLocalJsonFallback(true);
+        `;
+
+        return URL.createObjectURL(
+          new Blob([workerSrc], { type: 'text/javascript' }),
+        );
       }
-    }
 
-   // ===== Supabase: inserir e deletar refeição =====
-    async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
-      const tagArray = (tags || '').split(',').map(t => t.trim()).filter(Boolean);
+      const workerURL = createCompressionWorkerURL();
 
-      const { data: u } = await sb.auth.getUser();
-      const uid = u?.user?.id || null;
-      if (!uid) return { success: false, error: 'É preciso estar logado para adicionar.' };
-
-      const payload = {
-        nome: name,
-        kcal: Number(kcal) || 0,
-        proteina: Number(protein) || 0,
-        carboidrato: Number(carbs) || 0,
-        gordura: Number(fats) || 0,
-        bloco: block,
-        tags: tagArray,
-        created_by: uid // 👈 IMPORTANTE para passar na policy
-      };
-
-      const { data, error } = await sb
-        .from('refeicoes_biblioteca')
-        .insert(payload)
-        .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
-        .single();
-
-      if (error) return { success: false, error: error.message };
-
-      const item = data;
-      const meal = {
-        id: item.id,
-        name: item.nome,
-        block: item.bloco,
-        tags: item.tags,
-        created_by: item.created_by,
-        ingredients: [{ name: item.nome, baseKcal: item.kcal, protein: item.proteina, carbs: item.carboidrato, fats: item.gordura, portion: 1 }]
-      };
-      return { success: true, item: meal };
-    }
-
-    async function deleteMealFromDB(id) {
-      if (!id) return { ok: false, error: 'ID inválido.' };
-
-      const { data: u } = await sb.auth.getUser();
-      const uid = u?.user?.id || null;
-      if (!uid) return { ok: false, error: 'É preciso estar logado para excluir.' };
-
-      const { error } = await sb
-        .from('refeicoes_biblioteca')
-        .delete()
-        .eq('id', id)
-        .eq('created_by', uid);
-
-      if (error) return { ok: false, error: error.message };
-      return { ok: true };
-    }
-      const payload = {
-        nome: name,
-        kcal: Number(kcal) || 0,
-        proteina: Number(protein) || 0,
-        carboidrato: Number(carbs) || 0,
-        gordura: Number(fats) || 0,
-        bloco: block,
-        tags: tagArray,
-        created_by: uid // 👈 IMPORTANTE para passar na policy
-      };
-
-      const { data, error } = await sb
-        .from('refeicoes_biblioteca')
-        .insert(payload)
-        .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
-        .single();
-
-      if (error) return { success: false, error: error.message };
-
-      const item = data;
-      const meal = {
-        id: item.id,
-        name: item.nome,
-        block: item.bloco,
-        tags: item.tags,
-        created_by: item.created_by,
-        ingredients: [{ name: item.nome, baseKcal: item.kcal, protein: item.proteina, carbs: item.carboidrato, fats: item.gordura, portion: 1 }]
-      };
-      return { success: true, item: meal };
-    }
-
-    async function deleteMealFromDB(id) {
-      if (!id) return { ok: false, error: 'ID inválido.' };
-
-      const { data: u } = await sb.auth.getUser();
-      const uid = u?.user?.id || null;
-      if (!uid) return { ok: false, error: 'É preciso estar logado para excluir.' };
-
-      const { error } = await sb
-        .from('refeicoes_biblioteca')
-        .delete()
-        .eq('id', id)
-        .eq('created_by', uid);
-
-      if (error) return { ok: false, error: error.message };
-      return { ok: true };
-    }
-    // ===== Web Worker de compressão de foto =====
-    const workerSrc = `
-      self.onmessage = async (e) => {
-        const { file } = e.data;
-        try {
-          const arr = await file.arrayBuffer();
-          const blob = new Blob([arr]);
-          const bmp = await createImageBitmap(blob);
-          const size = 512;
-          const minSide = Math.min(bmp.width, bmp.height);
-          const sx = Math.floor((bmp.width - minSide)/2);
-          const sy = Math.floor((bmp.height - minSide)/2);
-          const canvas = new OffscreenCanvas(size, size);
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(bmp, sx, sy, minSide, minSide, 0, 0, size, size);
-          const webp = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
-          self.postMessage({ ok:true, blob:webp }, [webp]);
-        } catch(err){
-          self.postMessage({ ok:false, error: err?.message || 'compress-failed' });
-        }
-      };
-    `;
-    const workerURL = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
-
-    // ===== Componentes auxiliares =====
-    const MinBtn = ({ on, toggle }) => (
-      <button onClick={toggle} className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700">
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          {on ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/> :
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"/>}
-        </svg>
-      </button>
-    );
-    const Section = ({ title, right, children }) => (
-      <div className="bg-slate-800/70 rounded-2xl p-5 shadow border border-slate-700/50">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-slate-100 text-lg font-semibold">{title}</h2>
-          {right}
-        </div>
-        {children}
-      </div>
-    );
-    const Stat = ({ label, value, unit="", target }) => {
-      const pct = Math.min(100, Math.max(0, (value / (target || 1)) * 100));
-      const ok = target ? value <= target * 1.05 : true;
-      return (
-        <div className="mb-3">
-          <div className="flex justify-between text-sm text-slate-300">
-            <span>{label}</span>
-            <span><strong className={ok?"text-green-400":"text-red-400"}>{round(value)}{unit}</strong>{target && <span className="text-slate-400"> / {round(target)}{unit}</span>}</span>
-          </div>
-          <div className="h-2 bg-slate-700 rounded">
-            <div style={{ width: `${pct}%` }} className={`h-2 rounded ${ok?"bg-green-500":"bg-red-500"}`}/>
-          </div>
-        </div>
+      // ---------------------------------------------------------------------
+      // Componentes compartilhados
+      // ---------------------------------------------------------------------
+      const MinButton = ({ on, toggle }) => (
+        <button
+          onClick={toggle}
+          className="text-slate-400 hover:text-slate-200 p-1 rounded bg-slate-700/50 hover:bg-slate-700"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            {on ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+            )}
+          </svg>
+        </button>
       );
-    };
 
-    function MealItem({
-      slotKey, index, meal, slotKeys, round,
-      resetMealIngredients, duplicateMealTo, toggleLock, removeMeal,
-      updateIngredientPortion, toggleIngredientIncluded, removeIngredient, addQuickIngredient,
-      getSlotLabel
-    }) {
-      const menuRef = React.useRef(null);
-      const [openMenu, setOpenMenu] = React.useState(false);
-
-      React.useEffect(() => {
-        const onDoc = (ev) => { if (!menuRef.current?.contains(ev.target)) setOpenMenu(false); };
-        document.addEventListener('click', onDoc);
-        return () => document.removeEventListener('click', onDoc);
-      }, []);
-
-      const otherSlots = slotKeys.filter(sk => sk !== slotKey);
-
-      return (
-        <li className={`p-3 border rounded-xl ${meal.isLocked?'border-emerald-500/50 bg-emerald-900/10':'border-slate-700 bg-slate-900/50'}`}>
-          <div className="flex justify-between items-start mb-3">
-            <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
-              {meal.name}
-              {meal.isLocked && (
-                <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
-                </svg>
-              )}
-            </div>
-            <div className="flex gap-2 items-center">
-              <button onClick={()=> resetMealIngredients(slotKey,index)}
-                      className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">
-                Resetar ingredientes
-              </button>
-              <div ref={menuRef} className={`menu ${openMenu ? 'open' : ''}`}>
-                <button onClick={()=> setOpenMenu(v=>!v)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">⋯</button>
-                <div className="menu-content rounded">
-                  {otherSlots.map(tk => (
-                    <div key={tk} className="menu-item" onClick={()=> { duplicateMealTo(slotKey,index,tk); setOpenMenu(false); }}>
-                      Duplicar para {getSlotLabel(tk)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button onClick={()=> toggleLock(slotKey, index)}
-                      className={`text-xs px-2 py-0.5 rounded border ${meal.isLocked?'border-red-500 text-red-300 bg-red-900/20':'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
-                {meal.isLocked?'Editar':'Feita'}
-              </button>
-              <button onClick={()=> removeMeal(slotKey, index)} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10">
-                Remover
-              </button>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
-          <ul className="space-y-2">
-            {(meal.ingredients||[]).map((ing, j) => {
-              const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
-              const base=+ing.baseKcal || (p*4+c*4+f*9);
-              const por=+ing.portion||1;
-              const kcal = base*por;
-              const disabled = meal.isLocked;
-              const included = ing.included !== false;
-              return (
-                <li key={j} className={`flex flex-wrap md:flex-nowrap gap-2 justify-between items-center text-xs pl-3 py-1 border-l-2 ${included?'border-emerald-500/60':'border-slate-700 bg-slate-800/40 line-through opacity-70'}`}>
-                  <div className="text-slate-300 flex-1 min-w-0 truncate">
-                    {ing.name} (<strong className="text-slate-200">{round(kcal)} kcal</strong>)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={ing.portion} disabled={disabled}
-                      onChange={(e)=> updateIngredientPortion(slotKey, index, j, e.target.value)}
-                      className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${disabled?'opacity-50 cursor-not-allowed border-slate-700':'border-slate-600'}`}>
-                      {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
-                    </select>
-                    <button
-                      onClick={()=> toggleIngredientIncluded(slotKey, index, j)} disabled={disabled}
-                      className={`text-xs px-2 py-0.5 rounded border ${included?'border-yellow-600 text-yellow-300 hover:bg-yellow-900/20':'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'}`}>
-                      {included?'Excluir':'Incluir'}
-                    </button>
-                    <button
-                      onClick={()=> removeIngredient(slotKey, index, j)} disabled={disabled}
-                      className={`text-xs p-1 rounded ${disabled?'text-slate-600 cursor-not-allowed':'text-red-400 hover:text-red-300 hover:bg-red-900/20'}`} title="Remover ingrediente">
-                      <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <QuickAdd onAdd={(ing)=> addQuickIngredient(slotKey, index, ing)} disabled={meal.isLocked} />
-        </li>
+      const Section = ({ title, right, children }) => (
+        <section className="bg-slate-800/70 rounded-2xl p-5 shadow border border-slate-700/50">
+          <header className="flex items-center justify-between mb-4">
+            <h2 className="text-slate-100 text-lg font-semibold">{title}</h2>
+            {right}
+          </header>
+          {children}
+        </section>
       );
-    }
 
-    function QuickAdd({ onAdd, disabled }) {
-      const [name, setName] = useState("");
-      const [kcal, setKcal] = useState("");
-      const [p, setP] = useState("");
-      const [c, setC] = useState("");
-      const [f, setF] = useState("");
-      const [portion, setPortion] = useState("1");
+      const Stat = ({ label, value, unit = '', target }) => {
+        const percent = Math.min(100, Math.max(0, (value / (target || 1)) * 100));
+        const withinTarget = target ? value <= target * 1.05 : true;
 
-      const submit = () => {
-        if (!name.trim()) return alert('Informe o nome.');
-        const kcalN = +kcal;
-        const hasMacros = p || c || f;
-        const baseKcal = hasMacros ? ( (+p||0)*4 + (+c||0)*4 + (+f||0)*9 ) : (Number.isFinite(kcalN)? kcalN : 0);
-        const ing = {
-          name: name.trim(), baseKcal: baseKcal, protein: +p || 0, carbs: +c || 0, fats: +f || 0, portion: +portion || 1
-        };
-        onAdd(ing);
-        setName(""); setKcal(""); setP(""); setC(""); setF(""); setPortion("1");
-      };
-
-      return (
-        <div className="mt-3 p-3 rounded-lg border border-slate-700 bg-slate-900/60">
-          <div className="text-xs text-slate-400 mb-2 font-medium">+ Ingrediente rápido</div>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome"
-                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs md:col-span-2"/>
-            <input value={kcal} onChange={e=>setKcal(e.target.value)} placeholder="kcal (se não P/C/G)"
-                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
-            <input value={p} onChange={e=>setP(e.target.value)} placeholder="P"
-                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
-            <input value={c} onChange={e=>setC(e.target.value)} placeholder="C"
-                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
-            <input value={f} onChange={e=>setF(e.target.value)} placeholder="G"
-                   className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs"/>
-            <select value={portion} onChange={e=>setPortion(e.target.value)}
-                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs">
-              {[0.5,1,1.5,2,3].map(v => <option key={v} value={v}>{v}x</option>)}
-            </select>
-            <button onClick={submit} disabled={disabled}
-                    className={`text-xs px-2 py-1 rounded border ${disabled?'border-slate-700 text-slate-600':'border-emerald-500 text-emerald-300 hover:bg-emerald-500/10'}`}>
-              Adicionar
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // ===== Formulário de Adição de Refeição =====
-    function AddMealForm({ refreshLibrary, session }) {
-      const [name, setName] = useState('');
-      const [kcal, setKcal] = useState('');
-      const [protein, setProtein] = useState('');
-      const [carbs, setCarbs] = useState('');
-      const [fats, setFats] = useState('');
-      const [block, setBlock] = useState('500');
-      const [tags, setTags] = useState('');
-      const [loading, setLoading] = useState(false);
-
-      const isFormValid = name.trim() && (kcal || (protein || carbs || fats));
-
-      const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!isFormValid) return alert('Preencha o nome e o total de Kcal, ou os macros (P/C/G).');
-
-        if (!session?.user?.id) {
-          alert('Aviso: para inserir sem login, você precisa de uma política RLS que permita INSERT a anônimos; caso contrário, faça login.');
-        }
-
-        setLoading(true);
-        const result = await addMealToDB({ name, kcal, protein, carbs, fats, block, tags });
-        setLoading(false);
-
-        if (result.success) {
-          alert(`Refeição "${result.item.name}" adicionada!`);
-          setName(''); setKcal(''); setProtein(''); setCarbs(''); setFats(''); setTags('');
-          refreshLibrary();
-        } else {
-          alert(`Falha ao adicionar: ${result.error}`);
-        }
-      };
-
-      return (
-        <Section title="Adicionar Nova Refeição" right={loading && <span className="text-sm text-slate-400">Salvando...</span>}>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3 text-sm">
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Nome da Refeição (Obrigatório)"
-                   className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"/>
-
-            <div className="grid grid-cols-2 gap-3">
-              <input type="number" value={kcal} onChange={e => setKcal(e.target.value)} placeholder="Kcal Total (Opcional se macros)"
-                     className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-              <select value={block} onChange={e => setBlock(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
-                <option value="250">Bloco 250 kcal</option>
-                <option value="350">Bloco 350 kcal</option>
-                <option value="500">Bloco 500 kcal</option>
-                <option value="750">Bloco 750 kcal</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <input type="number" value={protein} onChange={e => setProtein(e.target.value)} placeholder="Proteína (g)"
-                     className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-              <input type="number" value={carbs} onChange={e => setCarbs(e.target.value)} placeholder="Carboidratos (g)"
-                     className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-              <input type="number" value={fats} onChange={e => setFats(e.target.value)} placeholder="Gorduras (g)"
-                     className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-            </div>
-
-            <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (separe por vírgula)"
-                   className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-
-            <button type="submit" disabled={loading || !isFormValid}
-                    className={`px-4 py-2 rounded font-semibold text-white ${loading || !isFormValid ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-              {loading ? 'Adicionando...' : 'Adicionar à Biblioteca (Supabase)'}
-            </button>
-          </form>
-        </Section>
-      );
-    }
-
-    // ===== APP =====
-    function App() {
-      const uidRef = useRef('anon');
-      const [profile, setProfile] = useState(() => loadStateNS(PROFILE_STORAGE_KEY, uidRef.current, DEFAULT_PROFILE));
-      const [isProfileLocked, setIsProfileLocked] = useState(false);
-      const [slotKeys, setSlotKeys] = useState(() => {
-        const k = loadStateNS(SLOTS_STORAGE_KEY, uidRef.current, INITIAL_SLOT_KEYS);
-        return Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS;
-      });
-      const [currentDayId, setCurrentDayId] = useState(() => loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, INITIAL_DAY_ID));
-      const [allDays, setAllDays] = useState(() => {
-        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, {});
-        if (!Object.keys(d).length || !d[INITIAL_DAY_ID]) return { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) };
-        return d;
-      });
-      const day = allDays[currentDayId] || getInitialDayState(slotKeys);
-      const [favorites, setFavorites] = useState(() => new Set(loadState(FAVORITES_STORAGE_KEY, [])));
-      const [usage, setUsage] = useState(() => loadStateNS(USAGE_STORAGE_KEY, uidRef.current, {}));
-
-      useEffect(()=> saveStateNS(PROFILE_STORAGE_KEY, uidRef.current, profile), [profile]);
-      useEffect(()=> saveStateNS(ALL_DAYS_STORAGE_KEY, uidRef.current, allDays), [allDays]);
-      useEffect(()=> saveStateNS(CURRENT_DAY_ID_STORAGE_KEY, uidRef.current, currentDayId), [currentDayId]);
-      useEffect(()=> saveStateNS(SLOTS_STORAGE_KEY, uidRef.current, slotKeys), [slotKeys]);
-      useEffect(()=> saveState(FAVORITES_STORAGE_KEY, Array.from(favorites)), [favorites]);
-      useEffect(()=> saveStateNS(USAGE_STORAGE_KEY, uidRef.current, usage), [usage]);
-
-      const [session, setSession] = useState(null);
-      const [authReady, setAuthReady] = useState(false);
-      const [email, setEmail] = useState("");
-      const [password, setPassword] = useState("");
-      const [syncing, setSyncing] = useState(false);
-      const [typingNumeric, setTypingNumeric] = useState(false);
-      const [hydrated, setHydrated] = useState(false);
-      const lastSnapRef = useRef(null);
-      const debounceRef = useRef(null);
-
-      useEffect(() => {
-        let unsub = null;
-        (async () => {
-          const { data } = await sb.auth.getSession();
-          setSession(data.session || null);
-          setAuthReady(true);
-          const sub = sb.auth.onAuthStateChange((_e, s) => { setSession(s); setAuthReady(true); });
-          unsub = sub.data.subscription;
-        })();
-        return () => unsub?.unsubscribe();
-      }, []);
-
-      useEffect(() => {
-        const uid = session?.user?.id || 'anon';
-        if (uidRef.current === uid) return;
-        uidRef.current = uid;
-        setHydrated(false);
-
-        setProfile(loadStateNS(PROFILE_STORAGE_KEY, uid, DEFAULT_PROFILE));
-        const k = loadStateNS(SLOTS_STORAGE_KEY, uid, INITIAL_SLOT_KEYS);
-        setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
-        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, uid, {});
-        setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
-        setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, uid, INITIAL_DAY_ID));
-        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, [])));
-        setUsage(loadStateNS(USAGE_STORAGE_KEY, uid, {}));
-      }, [session]);
-
-      const [externalMeals, setExternalMeals] = useState([]);
-      useEffect(()=>{ fetchExternalMealsSafe({ force: false }).then(setExternalMeals); }, []);
-      const refreshLibrary = async ()=> setExternalMeals(await fetchExternalMealsSafe({ force: true }));
-
-      const [search, setSearch] = useState("");
-      const [searchInIngredients, setSearchInIngredients] = useState(true);
-      const [selectedBlock, setSelectedBlock] = useState("all");
-      const [activeTags, setActiveTags] = useState([]);
-      const [onlyFavs, setOnlyFavs] = useState(false);
-      const [orderBy, setOrderBy] = useState("relevance");
-      const [minProfile, setMinProfile] = useState(false);
-      const [minMacros, setMinMacros] = useState(false);
-      const [minLib, setMinLib] = useState(false);
-      const [minDay, setMinDay] = useState(false);
-
-      const unit = { weight: "kg", length: "cm" };
-
-      const safeProfile = useMemo(() => {
-        const base = { ...profile, unitSystem: "metric" };
-        return {
-          ...base,
-          age: toNum(base.age), weight: toNum(base.weight), height: toNum(base.height),
-          neck: toNum(base.neck), waist: toNum(base.waist), hip: toNum(base.hip),
-        };
-      }, [profile]);
-
-      const bmr = useMemo(()=> calcBMR(safeProfile), [safeProfile]);
-      const tdee = useMemo(()=> calcTDEE(bmr, safeProfile.activity), [bmr, safeProfile.activity]);
-      const targetCalories = useMemo(()=> round(adjustForGoal(tdee, safeProfile.goal)), [tdee, safeProfile.goal]);
-      const macroTargets = useMemo(()=> deriveMacroTargets({ weight: safeProfile.weight, calories: targetCalories }), [safeProfile.weight, targetCalories]);
-      const body = useMemo(()=> calcBodyFat(safeProfile), [safeProfile.sex, safeProfile.height, safeProfile.neck, safeProfile.waist, safeProfile.hip, safeProfile.weight]);
-
-      const LIB_WITH_TOTALS = useMemo(()=> {
-        const enriched = externalMeals.map(m => {
-          const totals = (m.ingredients||[]).reduce((a, e) => {
-            const p=+e.protein||0, c=+e.carbs||0, f=+e.fats||0;
-            const base=+e.baseKcal || (p*4+c*4+f*9);
-            const por=+e.portion||1;
-            a.kcal+=base*por; a.protein+=p*por; a.carbs+=c*por; a.fats+=f*por;
-            return a;
-          }, { kcal:0, protein:0, carbs:0, fats:0 });
-          return { ...m, ...totals, fav: favorites.has(m.id), used: usage[m.id]||0 };
-        });
-        let list = enriched.filter(m => {
-          const blockOk  = selectedBlock === "all" || (String(m.block).trim() === String(selectedBlock).trim());
-          const tagOk    = activeTags.length === 0 || activeTags.every(t => (m.tags||[]).includes(t));
-          const term = search.trim().toLowerCase();
-          const inName = (m.name || "").toLowerCase().includes(term);
-          const inIngs = searchInIngredients && (m.ingredients||[]).some(ing => (ing.name||"").toLowerCase().includes(term));
-          const searchOk = term ? (inName || inIngs) : true;
-          const favOk = !onlyFavs || m.fav;
-          return blockOk && tagOk && searchOk && favOk;
-        });
-        if (orderBy === "kcal-asc") list.sort((a,b)=> a.kcal - b.kcal);
-        else if (orderBy === "kcal-desc") list.sort((a,b)=> b.kcal - a.kcal);
-        else if (orderBy === "protein") list.sort((a,b)=> b.protein - a.protein);
-        else if (orderBy === "most-used") list.sort((a,b)=> (b.used||0) - (a.used||0));
-        return list;
-      }, [externalMeals, favorites, usage, selectedBlock, activeTags, search, searchInIngredients, onlyFavs, orderBy]);
-
-      function sumIngredients(list) {
-        return list.reduce((acc, ing) => {
-          if (ing.included === false) return acc;
-          const p=+ing.protein||0, c=+ing.carbs||0, f=+ing.fats||0;
-          const base=+ing.baseKcal || (p*4+c*4+f*9);
-          const por=+ing.portion||1;
-          acc.kcal+=base*por; acc.protein+=p*por; acc.carbs+=c*por; acc.fats+=f*por;
-          return acc;
-        }, { kcal:0, protein:0, carbs:0, fats:0 });
-      }
-      const slotTotals = useMemo(() => {
-        const t = {};
-        slotKeys.forEach(k => {
-          const meals = day[k] || [];
-          const s = meals.reduce((acc, meal) => {
-            const partial = sumIngredients(meal.ingredients || []);
-            acc.kcal += partial.kcal; acc.protein += partial.protein; acc.carbs += partial.carbs; acc.fats += partial.fats;
-            return acc;
-          }, {kcal:0,protein:0,carbs:0,fats:0});
-          t[k]=s;
-        });
-        return t;
-      }, [day, slotKeys]);
-
-      const totals = useMemo(()=> {
-        return Object.values(slotTotals).reduce((a,b)=>({kcal:a.kcal+b.kcal,protein:a.protein+b.protein,carbs:a.carbs+b.carbs,fats:a.fats+b.fats}),{kcal:0,protein:0,carbs:0,fats:0});
-      }, [slotTotals]);
-
-      const getSlotLabel = (k)=> `Refeição ${slotKeys.indexOf(k)+1}`;
-      const updateDay = (next)=> setAllDays(prev => ({ ...prev, [currentDayId]: next }));
-      const getMeta = (d) => ({ waterMl: 0, sleepH: 0, ...(d?.meta || {}) });
-
-      const addWater = (ml) => {
-        const meta = getMeta(day);
-        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) } };
-        updateDay(next);
-      };
-      const setWater = (ml) => {
-        const meta = getMeta(day);
-        const next = { ...day, meta: { ...meta, waterMl: Math.max(0, +ml || 0) } };
-        updateDay(next);
-      };
-      const setSleep = (h) => {
-        const meta = getMeta(day);
-        const val = Math.min(12, Math.max(0, +h || 0));
-        const next = { ...day, meta: { ...meta, sleepH: val } };
-        updateDay(next);
-      };
-      const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
-
-      const addTo = (slotKey, meal)=> {
-        const baseIngredients = (meal.ingredients||[]).map(x=>({...x, portion:1, included:true}));
-        const entry = {
-          mealId: meal.id, name: meal.name, isLocked:false,
-          ingredients: deepCopy(baseIngredients),
-          originalIngredients: deepCopy(baseIngredients)
-        };
-        updateDay({ ...day, [slotKey]: [...(day[slotKey]||[]), entry] });
-        setUsage(u => ({ ...u, [meal.id]: (u[meal.id]||0)+1 }));
-      };
-
-      const removeMeal = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].filter((_,idx)=> idx!==i) });
-      const toggleLock = (slotKey, i)=> updateDay({ ...day, [slotKey]: day[slotKey].map((m,idx)=> idx===i ? ({...m, isLocked:!m.isLocked}) : m) });
-
-      const duplicateMealTo = (fromKey, i, toKey) => {
-        const m = day[fromKey][i];
-        const copy = deepCopy(m);
-        updateDay({ ...day, [toKey]: [...(day[toKey]||[]), copy] });
-      };
-
-      const updateIngredientPortion = (slotKey, i, j, por)=> updateDay({
-        ...day,
-        [slotKey]: day[slotKey].map((m,idx)=> idx!==i || m.isLocked ? m :
-          ({...m, ingredients: m.ingredients.map((ing,k)=> k===j? {...ing, portion:Number(por)} : ing)}))
-      });
-
-      const toggleIngredientIncluded = (slotKey, i, j) => updateDay({
-        ...day,
-        [slotKey]: day[slotKey].map((m,idx)=> {
-          if (idx!==i || m.isLocked) return m;
-          const next = m.ingredients.map((ing,k)=> k===j ? ({...ing, included: !(ing.included!==false)}) : ing);
-          return { ...m, ingredients: next };
-        })
-      });
-
-      const resetMealIngredients = (slotKey, i) => updateDay({
-        ...day,
-        [slotKey]: day[slotKey].map((m,idx)=> {
-          if (idx!==i) return m;
-          return { ...m, ingredients: deepCopy(m.originalIngredients||[]), isLocked:false };
-        })
-      });
-
-      const removeIngredient = (slotKey,i,j)=> updateDay({
-        ...day,
-        [slotKey]: day[slotKey].map((m,idx)=> {
-          if (idx!==i || m.isLocked) return m;
-          const next = m.ingredients.filter((_,k)=> k!==j);
-          return next.length? {...m, ingredients:next} : {...m, ingredients:[]};
-        })
-      });
-
-      const addQuickIngredient = (slotKey,i,ing) => updateDay({
-        ...day,
-        [slotKey]: day[slotKey].map((m,idx)=> {
-          if (idx!==i || m.isLocked) return m;
-          return { ...m, ingredients: [...m.ingredients, { ...ing, included:true }] };
-        })
-      });
-
-      const addSlot = ()=> {
-        if (slotKeys.length>=8) return;
-        const key = `slot-${slotKeys.length+1}`;
-        setSlotKeys(prev=> [...prev, key]);
-        setAllDays(prev=>{
-          const up = {...prev};
-          Object.keys(up).forEach(did=> up[did] = { ...up[did], [key]: [] });
-          return up;
-        });
-      };
-      const removeSlot = (key)=> {
-        if (slotKeys.length<=1) return;
-        setSlotKeys(prev=> prev.filter(k=>k!==key));
-        setAllDays(prev=>{
-          const up = {...prev};
-          Object.keys(up).forEach(did=> {
-            const { [key]:_, ...rest } = up[did];
-            up[did] = rest;
-          });
-          return up;
-        });
-      };
-      const resetDay = ()=> updateDay(getInitialDayState(slotKeys));
-      const duplicateCurrentDay = ()=> {
-        const ids = Object.keys(allDays);
-        const last = ids.reduce((mx,id)=> Math.max(mx, parseInt(id.split('-')[1]||'0',10)), 0);
-        const newId = `day-${last+1}`;
-        setAllDays(prev => ({ ...prev, [newId]: JSON.parse(JSON.stringify(day)) }));
-        setCurrentDayId(newId);
-      };
-      const dayOptions = Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10)));
-      const getDayLabel = (id)=> `Dia ${dayOptions.indexOf(id)+1}`;
-
-      async function signUpPassword() {
-        if (!email || !password) return alert('Preencha e-mail e senha.');
-        const { error } = await sb.auth.signUp({ email, password });
-        if (error) return alert(error.message);
-        alert('Conta criada! Se a confirmação de e-mail estiver ativa, confirme e depois entre.');
-      }
-      async function signInPassword() {
-        if (!email || !password) return alert('Preencha e-mail e senha.');
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) return alert(error.message);
-      }
-      async function signOut() {
-        await sb.auth.signOut();
-        uidRef.current = 'anon';
-        const anonProfile = loadStateNS(PROFILE_STORAGE_KEY, 'anon', DEFAULT_PROFILE);
-        setProfile({ ...anonProfile, photoUrl: DEFAULT_PROFILE.photoUrl, photoUpdatedAt: null });
-        const k = loadStateNS(SLOTS_STORAGE_KEY, 'anon', INITIAL_SLOT_KEYS);
-        setSlotKeys(Array.isArray(k) && k.length ? k : INITIAL_SLOT_KEYS);
-        const d = loadStateNS(ALL_DAYS_STORAGE_KEY, 'anon', {});
-        setAllDays(Object.keys(d).length ? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
-        setCurrentDayId(loadStateNS(CURRENT_DAY_ID_STORAGE_KEY, 'anon', INITIAL_DAY_ID));
-        setFavorites(new Set(loadState(FAVORITES_STORAGE_KEY, [])));
-        setUsage(loadStateNS(USAGE_STORAGE_KEY, 'anon', {}));
-        setHydrated(true);
-      }
-
-      function snapshot() {
-        return JSON.stringify({
-          profile, allDays, slotKeys, currentDayId, favorites: Array.from(favorites), usage
-        });
-      }
-
-      async function loadCloud() {
-        if (!session) return;
-        setSyncing(true);
-        const { data, error } = await sb.from('user_state').select('*').eq('user_id', session.user.id).maybeSingle();
-        if (error) { setSyncing(false); setHydrated(true); return; }
-        if (!data) {
-          await sb.from('user_state').insert({ user_id: session.user.id, profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId, favorites: Array.from(favorites), usage });
-          lastSnapRef.current = snapshot();
-          setSyncing(false); setHydrated(true);
-          return;
-        }
-        try {
-          const p = data.profile || DEFAULT_PROFILE;
-          const d = data.all_days || {};
-          const s = Array.isArray(data.slot_keys)? data.slot_keys : INITIAL_SLOT_KEYS;
-          const cid = data.current_day_id || INITIAL_DAY_ID;
-          const fav = new Set(Array.isArray(data.favorites)? data.favorites : Array.from(favorites));
-          const u = data.usage || usage;
-          setProfile(p);
-          setAllDays(Object.keys(d).length? d : { [INITIAL_DAY_ID]: getInitialDayState(INITIAL_SLOT_KEYS) });
-          setSlotKeys(s.length? s : INITIAL_SLOT_KEYS);
-          setCurrentDayId(cid);
-          setFavorites(fav);
-          setUsage(u);
-          lastSnapRef.current = JSON.stringify({ profile:p, allDays:d, slotKeys:s, currentDayId:cid, favorites:Array.from(fav), usage:u });
-        } finally { setSyncing(false); setHydrated(true); }
-      }
-      async function saveCloudNow() {
-        if (!session) return;
-        setSyncing(true);
-        await sb.from('user_state').upsert({
-          user_id: session.user.id, profile, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
-          favorites: Array.from(favorites), usage, updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
-        lastSnapRef.current = snapshot();
-        setSyncing(false);
-      }
-      useEffect(()=>{ if (session) loadCloud(); }, [session]);
-      useEffect(() => {
-        if (!session || !hydrated) return;
-        if (typingNumeric) return;
-        const snap = snapshot();
-        if (snap === lastSnapRef.current) return;
-        clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => { saveCloudNow(); }, 1200);
-        return () => clearTimeout(debounceRef.current);
-      }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric, hydrated]);
-
-      function getExt(name) {
-        const p = (name || '').split('.');
-        return (p.length > 1 ? p.pop() : 'webp').toLowerCase();
-      }
-      async function onPhoto(e){
-        if (isProfileLocked) return;
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (!session?.user?.id) { return alert('Faça login para salvar sua foto.'); }
-
-        const worker = new Worker(workerURL);
-        const compressed = await new Promise((resolve) => {
-          const t = setTimeout(()=> resolve(null), 15000);
-          worker.onmessage = (ev) => {
-            clearTimeout(t);
-            if (ev.data?.ok) resolve(ev.data.blob);
-            else resolve(null);
-            worker.terminate();
-          };
-          worker.postMessage({ file });
-        });
-
-        const blob = compressed || file;
-        const userId = session.user.id;
-        const ext = getExt(file.name);
-        const path = `u/${userId}/avatar.${ext === 'jpg' ? 'jpg' : 'webp'}`;
-
-        const { error: upErr } = await sb.storage.from(AVATAR_BUCKET).upload(path, blob, { cacheControl: '3600', upsert: true });
-        if (upErr) { alert('Falha no upload: ' + upErr.message); return; }
-
-        const { data } = sb.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-        const publicUrl = data.publicUrl;
-
-        const next = { ...profile, photoUrl: publicUrl, photoUpdatedAt: Date.now() };
-        setProfile(next);
-
-        await sb.from('user_state').upsert({
-          user_id: userId, profile: next, all_days: allDays, slot_keys: slotKeys, current_day_id: currentDayId,
-          favorites: Array.from(favorites), usage, updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
-        lastSnapRef.current = snapshot();
-      }
-
-      const handleProfileChangeLive = (key, value) => {
-        if (isProfileLocked) return;
-        setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
-        setProfile(p => ({ ...p, [key]: value }));
-      };
-      const handleProfileBlur = (key) => {
-        setTypingNumeric(false);
-        setProfile(p => {
-          if (['sex','activity','goal','photoUrl','unitSystem','photoUpdatedAt'].includes(key)) return p;
-          return { ...p, [key]: normalizeOnBlur(key, p[key]) };
-        });
-      };
-
-      const toggleFavorite = (id) => setFavorites(prev => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id); else next.add(id);
-        return next;
-      });
-
-      const exportDay = () => {
-        const payload = { version:"6.0", day: day, slotKeys };
-        const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `cardapio_${currentDayId}.json`;
-        a.click();
-        setTimeout(()=> URL.revokeObjectURL(a.href), 1500);
-      };
-      const importInputRef = useRef(null);
-      const importDay = (file) => {
-        const fr = new FileReader();
-        fr.onload = () => {
-          try {
-            const data = JSON.parse(fr.result);
-            if (!data?.day) throw new Error('Arquivo inválido');
-            const keys = Array.isArray(data.slotKeys) && data.slotKeys.length ? data.slotKeys : slotKeys;
-            setSlotKeys(keys);
-            updateDay(data.day);
-            alert('Dia importado com sucesso!');
-          } catch(err) {
-            alert('Falha ao importar: ' + (err?.message||''));
-          }
-        };
-        fr.readAsText(file);
-      };
-
-      // >>> LOGIN-GATE
-      if (authReady && !session) {
         return (
-          <div className="min-h-screen flex items-center justify-center bg-[#0a0a1a] px-4">
-            <div className="w-full max-w-md bg-slate-800/70 rounded-2xl p-6 border border-slate-700/60 shadow">
-              <h1 className="text-xl font-semibold text-slate-100 mb-1 text-center">Cardápio Inteligente</h1>
-              <p className="text-xs text-slate-400 mb-5 text-center">
-                Entre para acessar seu perfil, biblioteca e dias salvos.
-              </p>
-
-              <div className="flex flex-col gap-3">
-                <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com"
-                       className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-                <input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} placeholder="senha"
-                       className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"/>
-
-                <button onClick={signInPassword} className="text-sm px-3 py-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
-                <button onClick={signUpPassword} className="text-sm px-3 py-2 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10">Criar conta</button>
-              </div>
-
-              <p className="text-[11px] text-slate-500 mt-4 text-center">
-                Suas informações ficam salvas na nuvem e só aparecem quando você estiver logado.
-              </p>
+          <div className="mb-3">
+            <div className="flex justify-between text-sm text-slate-300">
+              <span>{label}</span>
+              <span>
+                <strong className={withinTarget ? 'text-green-400' : 'text-red-400'}>
+                  {round(value)}
+                  {unit}
+                </strong>
+                {target && (
+                  <span className="text-slate-400">
+                    {' '}/ {round(target)}
+                    {unit}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="h-2 bg-slate-700 rounded">
+              <div
+                style={{ width: `${percent}%` }}
+                className={`h-2 rounded ${withinTarget ? 'bg-green-500' : 'bg-red-500'}`}
+              />
             </div>
           </div>
         );
+      };
+
+      function QuickAdd({ onAdd, disabled }) {
+        const [name, setName] = useState('');
+        const [kcal, setKcal] = useState('');
+        const [protein, setProtein] = useState('');
+        const [carbs, setCarbs] = useState('');
+        const [fats, setFats] = useState('');
+
+        function reset() {
+          setName('');
+          setKcal('');
+          setProtein('');
+          setCarbs('');
+          setFats('');
+        }
+
+        const isValid = name.trim() !== '' && (kcal || protein || carbs || fats);
+
+        return (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!isValid || disabled) return;
+
+              const payload = {
+                name: name.trim(),
+                baseKcal: Number(kcal) || undefined,
+                protein: Number(protein) || 0,
+                carbs: Number(carbs) || 0,
+                fats: Number(fats) || 0,
+                portion: 1,
+              };
+
+              onAdd(payload);
+              reset();
+            }}
+            className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2 border-t border-slate-700 pt-3"
+          >
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nome do ingrediente"
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs md:col-span-2"
+              disabled={disabled}
+            />
+            <input
+              value={kcal}
+              onChange={(event) => setKcal(event.target.value)}
+              placeholder="kcal"
+              type="number"
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs"
+              disabled={disabled}
+            />
+            <input
+              value={protein}
+              onChange={(event) => setProtein(event.target.value)}
+              placeholder="P"
+              type="number"
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs"
+              disabled={disabled}
+            />
+            <input
+              value={carbs}
+              onChange={(event) => setCarbs(event.target.value)}
+              placeholder="C"
+              type="number"
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs"
+              disabled={disabled}
+            />
+            <input
+              value={fats}
+              onChange={(event) => setFats(event.target.value)}
+              placeholder="G"
+              type="number"
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs"
+              disabled={disabled}
+            />
+            <button
+              type="submit"
+              disabled={!isValid || disabled}
+              className={`md:col-span-5 text-xs px-3 py-2 rounded border ${
+                !isValid || disabled
+                  ? 'border-slate-700 text-slate-600 cursor-not-allowed'
+                  : 'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'
+              }`}
+            >
+              Adicionar ingrediente rápido
+            </button>
+          </form>
+        );
       }
-      // <<< LOGIN-GATE
 
-      const WATER_GOAL = 3000;
-      const SLEEP_GOAL = 8;
-      const water = Math.max(0, day?.meta?.waterMl ?? 0);
-      const sleep = Math.max(0, day?.meta?.sleepH ?? 0);
-      const waterPct = Math.min(100, (water / WATER_GOAL) * 100);
-      const sleepPct = Math.min(100, (sleep / SLEEP_GOAL) * 100);
+      function MealItem({
+        slotKey,
+        index,
+        meal,
+        slotKeys,
+        resetMealIngredients,
+        duplicateMealTo,
+        toggleLock,
+        removeMeal,
+        updateIngredientPortion,
+        toggleIngredientIncluded,
+        removeIngredient,
+        addQuickIngredient,
+        getSlotLabel,
+      }) {
+        const menuRef = useRef(null);
+        const [openMenu, setOpenMenu] = useState(false);
 
-      return (
-        <div className="min-h-screen">
-          <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#0a0a1a]/90 backdrop-blur z-20">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
-                <p className="text-sm text-slate-400">v6.2 • Adicionar Refeição (Supabase)</p>
+        useEffect(() => {
+          const listener = (event) => {
+            if (!menuRef.current?.contains(event.target)) setOpenMenu(false);
+          };
+          document.addEventListener('click', listener);
+          return () => document.removeEventListener('click', listener);
+        }, []);
+
+        const otherSlots = slotKeys.filter((key) => key !== slotKey);
+
+        return (
+          <li
+            className={`p-3 border rounded-xl ${
+              meal.isLocked
+                ? 'border-emerald-500/50 bg-emerald-900/10'
+                : 'border-slate-700 bg-slate-900/50'
+            }`}
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div className="text-base text-emerald-400 font-bold flex items-center gap-2">
+                {meal.name}
+                {meal.isLocked && (
+                  <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    ></path>
+                  </svg>
+                )}
               </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400">Unidades:</span>
-                  <span className="px-2 py-1 rounded border border-slate-600 bg-slate-800/40">cm/kg</span>
-                </div>
-
-                {authReady && (!session ? (
-                  <>
-                    <input value={email} onChange={(e)=> setEmail(e.target.value)} placeholder="seu@email.com"
-                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-44"/>
-                    <input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} placeholder="senha"
-                           className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-36"/>
-                    <button onClick={signInPassword} className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Entrar</button>
-                    <button onClick={signUpPassword} className="text-sm px-3 py-1 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10">Criar conta</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs text-slate-400 hidden md:block">{session.user.email}</span>
-                    <button onClick={saveCloudNow} disabled={syncing}
-                            className={`text-sm px-3 py-1 rounded border ${syncing?'border-slate-700 text-slate-500':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
-                      {syncing ? (
-                        <span className="inline-flex items-center gap-2">
-                          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-25"></circle>
-                            <path d="M4 12a8 8 0 018-8" strokeWidth="2" className="opacity-75"></path>
-                          </svg>
-                          Salvando…
-                        </span>
-                      ) : 'Salvar agora'}
-                    </button>
-                    <button onClick={signOut} className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10">Sair</button>
-                  </>
-                ))}
-                <a href="#biblioteca" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Biblioteca</a>
-                <a href="#meu-dia" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Meu Dia</a>
-              </div>
-            </div>
-          </header>
-
-          <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* COLUNA PERFIL */}
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              <Section
-                title="Seu Perfil"
-                right={
-                  <div className="flex gap-2">
-                    <button onClick={()=> setIsProfileLocked(v=>!v)}
-                            className={`text-xs px-2 py-0.5 rounded border ${isProfileLocked ? 'border-red-500 text-red-300 bg-red-900/20' : 'border-emerald-500 text-emerald-300 bg-emerald-900/20'}`}>
-                      {isProfileLocked ? 'Editar' : 'Trancar Perfil'}
-                    </button>
-                    <MinBtn on={minProfile} toggle={()=> setMinProfile(v=>!v)}/>
+              <div className="flex gap-2 items-center flex-wrap justify-end">
+                <button
+                  onClick={() => resetMealIngredients(slotKey, index)}
+                  className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                >
+                  Resetar ingredientes
+                </button>
+                <div ref={menuRef} className={`menu ${openMenu ? 'open' : ''}`}>
+                  <button
+                    onClick={() => setOpenMenu((value) => !value)}
+                    className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                  >
+                    ⋯
+                  </button>
+                  <div className="menu-content rounded">
+                    {otherSlots.map((targetKey) => (
+                      <div
+                        key={targetKey}
+                        className="menu-item"
+                        onClick={() => {
+                          duplicateMealTo(slotKey, index, targetKey);
+                          setOpenMenu(false);
+                        }}
+                      >
+                        Duplicar para {getSlotLabel(targetKey)}
+                      </div>
+                    ))}
                   </div>
-                }>
-                <div className={`flex flex-col items-center mb-4 ${isProfileLocked ? 'opacity-70' : ''}`}>
-                  <label htmlFor="photo" className={isProfileLocked?'':'cursor-pointer'}>
-                    <img src={profile.photoUrl ? `${profile.photoUrl}?v=${encodeURIComponent(profile.photoUpdatedAt || '')}` : DEFAULT_PROFILE.photoUrl} alt="Foto"
-                      className={`w-24 h-24 rounded-full object-cover border-4 border-slate-600 ${isProfileLocked?'':'hover:border-emerald-500'}`}
-                      onError={(e)=> e.target.src = DEFAULT_PROFILE.photoUrl}
-                    />
-                    <input id="photo" type="file" accept="image/*" onChange={onPhoto} className="hidden" disabled={isProfileLocked}/>
-                  </label>
-                  <p className="text-xs text-slate-400 mt-2">{isProfileLocked?'Informações fixadas':'Toque para alterar foto (com compactação)'}</p>
                 </div>
-
-                {!minProfile && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 text-sm border-b border-slate-700 pb-4 mb-4">
-                      <label className="flex flex-col gap-1">
-                        <span>Sexo</span>
-                        <select value={profile.sex} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('sex', e.target.value)} onBlur={()=> handleProfileBlur('sex')}
-                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
-                          <option value="M">Masculino</option>
-                          <option value="F">Feminino</option>
-                        </select>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span>Idade</span>
-                        <input type="number" value={profile.age} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('age', e.target.value)} onBlur={()=> handleProfileBlur('age')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span>Peso ({unit.weight})</span>
-                        <input type="number" value={profile.weight} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('weight', e.target.value)} onBlur={()=> handleProfileBlur('weight')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span>Altura ({unit.length})</span>
-                        <input type="number" value={profile.height} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('height', e.target.value)} onBlur={()=> handleProfileBlur('height')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                      </label>
-                    </div>
-
-                    <span className="text-slate-300 font-semibold text-sm block mb-3">Medidas (p/ %Gordura)</span>
-                    <div className="grid grid-cols-2 gap-3 text-sm border-b border-slate-700 pb-4 mb-4">
-                      <label className="flex flex-col gap-1">
-                        <span>Pescoço ({unit.length})</span>
-                        <input type="number" value={profile.neck} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('neck', e.target.value)} onBlur={()=> handleProfileBlur('neck')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span>Cintura ({unit.length})</span>
-                        <input type="number" value={profile.waist} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('waist', e.target.value)} onBlur={()=> handleProfileBlur('waist')}
-                               className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                      </label>
-                      {profile.sex==='F' && (
-                        <label className="flex flex-col gap-1 col-span-2">
-                          <span>Quadril ({unit.length})</span>
-                          <input type="number" value={profile.hip} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('hip', e.target.value)} onBlur={()=> handleProfileBlur('hip')}
-                                 className="bg-slate-900 border border-slate-600 rounded px-2 py-2" inputMode="decimal"/>
-                        </label>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 text-sm">
-                      <label className="flex flex-col gap-1">
-                        <span>Nível de Atividade</span>
-                        <select value={profile.activity} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('activity', e.target.value)} onBlur={()=> handleProfileBlur('activity')}
-                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
-                          <option value="sedentary">Sedentário</option>
-                          <option value="light">Leve (1–3x/sem)</option>
-                          <option value="moderate">Moderado (3–5x/sem)</option>
-                          <option value="active">Ativo (6–7x/sem)</option>
-                          <option value="very">Muito ativo</option>
-                        </select>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span>Objetivo</span>
-                        <select value={profile.goal} disabled={isProfileLocked} onChange={(e)=> handleProfileChangeLive('goal', e.target.value)} onBlur={()=> handleProfileBlur('goal')}
-                                className="bg-slate-900 border border-slate-600 rounded px-2 py-2">
-                          <option value="loss">Emagrecer (déficit)</option>
-                          <option value="maintain">Manter</option>
-                          <option value="gain">Ganhar (superávit)</option>
-                          <option value="recomp">Recomposição</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="p-3 rounded bg-slate-900 border border-slate-700">
-                        <div className="text-slate-400">TDEE alvo</div>
-                        <div className="text-xl font-semibold text-emerald-400">{round(targetCalories)}</div>
-                        <div className="text-slate-500 text-xs">kcal/dia</div>
-                      </div>
-                      <div className="p-3 rounded bg-slate-900 border border-slate-700">
-                        <div className="text-slate-400">Macros alvo</div>
-                        <div className="text-sm text-slate-300">P {macroTargets.protein} • C {macroTargets.carbs} • G {macroTargets.fats}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 p-4 rounded-xl bg-slate-900 border border-slate-700">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-slate-300 font-semibold">Composição Corporal (US Navy)</span>
-                        <span className="text-xs text-slate-500">auto • cm</span>
-                      </div>
-                      {body.bf == null ? (
-                        <div className="text-xs text-slate-500">Preencha altura, pescoço, cintura {profile.sex==='F' ? 'e quadril ' : ''}para estimar a % de gordura.</div>
-                      ) : (
-                        <div className="grid grid-cols-3 gap-3 text-center">
-                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
-                            <div className="text-slate-400 text-xs">% Gordura</div>
-                            <div className="text-2xl font-bold text-amber-300">{body.bf}%</div>
-                          </div>
-                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
-                            <div className="text-slate-400 text-xs">Massa Magra</div>
-                            <div className="text-xl font-semibold">{body.lm} kg</div>
-                          </div>
-                          <div className="p-3 rounded bg-slate-800 border border-slate-700">
-                            <div className="text-slate-400 text-xs">Massa Gorda</div>
-                            <div className="text-xl font-semibold">{body.fm} kg</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </Section>
-
-              <Section title="Metas de Macros" right={<MinBtn on={minMacros} toggle={()=> setMinMacros(v=>!v)}/>}>
-                {!minMacros && (
-                  <>
-                    <Stat label="Calorias" value={totals.kcal} unit=" kcal" target={targetCalories}/>
-                    <Stat label="Proteínas" value={totals.protein} unit=" g" target={macroTargets.protein}/>
-                    <Stat label="Carboidratos" value={totals.carbs} unit=" g" target={macroTargets.carbs}/>
-                    <Stat label="Gorduras" value={totals.fats} unit=" g" target={macroTargets.fats}/>
-                  </>
-                )}
-              </Section>
+                <button
+                  onClick={() => toggleLock(slotKey, index)}
+                  className={`text-xs px-2 py-0.5 rounded border ${
+                    meal.isLocked
+                      ? 'border-red-500 text-red-300 bg-red-900/20'
+                      : 'border-emerald-500 text-emerald-300 bg-emerald-900/20'
+                  }`}
+                >
+                  {meal.isLocked ? 'Editar' : 'Feita'}
+                </button>
+                <button
+                  onClick={() => removeMeal(slotKey, index)}
+                  className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-400 hover:bg-red-500/10"
+                >
+                  Remover
+                </button>
+              </div>
             </div>
 
-            {/* COLUNA BIBLIOTECA + DIA */}
-            <div className="lg:col-span-2 flex flex-col gap-6">
+            <p className="text-xs text-slate-400 mb-2 font-medium">Ingredientes:</p>
+            <ul className="space-y-2">
+              {(meal.ingredients || []).map((ingredient, ingredientIndex) => {
+                const p = +ingredient.protein || 0;
+                const c = +ingredient.carbs || 0;
+                const f = +ingredient.fats || 0;
+                const base = +ingredient.baseKcal || p * 4 + c * 4 + f * 9;
+                const portion = +ingredient.portion || 1;
+                const kcal = base * portion;
+                const disabled = meal.isLocked;
+                const included = ingredient.included !== false;
 
-              {/* Formulário de adição */}
-              <AddMealForm refreshLibrary={refreshLibrary} session={session} />
-
-              {/* Biblioteca e Meu Dia */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-                {/* BIBLIOTECA */}
-                <Section
-                  title="Biblioteca de Refeições"
-                  right={
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      <input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Buscar..."
-                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-40"/>
-                      <label className="text-xs flex items-center gap-1 text-slate-400">
-                        <input type="checkbox" checked={searchInIngredients} onChange={e=> setSearchInIngredients(e.target.checked)} />
-                        buscar em ingredientes
-                      </label>
-                      <select value={selectedBlock} onChange={(e)=> setSelectedBlock(e.target.value)}
-                              className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
-                        <option value="all">Todos</option>
-                        <option value="250">250</option>
-                        <option value="350">350</option>
-                        <option value="500">500</option>
-                        <option value="750">750</option>
-                      </select>
-                      <select value={orderBy} onChange={(e)=> setOrderBy(e.target.value)}
-                              className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm">
-                        <option value="relevance">Relevância</option>
-                        <option value="kcal-asc">kcal ↑</option>
-                        <option value="kcal-desc">kcal ↓</option>
-                        <option value="protein">Proteína ↓</option>
-                        <option value="most-used">Mais usadas</option>
-                      </select>
-                      <label className="text-xs flex items-center gap-1 text-slate-400">
-                        <input type="checkbox" checked={onlyFavs} onChange={e=> setOnlyFavs(e.target.checked)} />
-                        favoritos
-                      </label>
-                      <button onClick={refreshLibrary}
-                              className="text-xs px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40">Atualizar</button>
-                      <MinBtn on={minLib} toggle={()=> setMinLib(v=>!v)}/>
+                return (
+                  <li
+                    key={ingredientIndex}
+                    className={`flex flex-wrap md:flex-nowrap gap-2 justify-between items-center text-xs pl-3 py-1 border-l-2 ${
+                      included
+                        ? 'border-emerald-500/60'
+                        : 'border-slate-700 bg-slate-800/40 line-through opacity-70'
+                    }`}
+                  >
+                    <div className="text-slate-300 flex-1 min-w-0 truncate">
+                      {ingredient.name} (
+                      <strong className="text-slate-200">{round(kcal)} kcal</strong>)
                     </div>
-                  }>
-                  {!minLib && (
-                    <div id="biblioteca" className="grid grid-cols-1 gap-3 max-h-[540px] overflow-y-auto pr-2">
-                      {LIB_WITH_TOTALS.map(m => (
-                        <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-semibold text-slate-100 flex items-center gap-2">
-                                <button onClick={()=> toggleFavorite(m.id)} title={favorites.has(m.id)?'Remover dos favoritos':'Favoritar'} className="text-amber-300">
-                                  {favorites.has(m.id) ? '⭐' : '☆'}
-                                </button>
-                                <span className="truncate">{m.name}</span>
-                              </div>
-                              <div className="text-sm text-slate-400">
-                                {round(m.kcal)} kcal • P {round(m.protein)}g • C {round(m.carbs)}g • G {round(m.fats)}g
-                              </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={ingredient.portion}
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateIngredientPortion(
+                            slotKey,
+                            index,
+                            ingredientIndex,
+                            event.target.value,
+                          )
+                        }
+                        className={`bg-slate-700 border rounded px-1 py-0.5 text-xs w-20 ${
+                          disabled
+                            ? 'opacity-50 cursor-not-allowed border-slate-700'
+                            : 'border-slate-600'
+                        }`}
+                      >
+                        {[0.5, 1, 1.5, 2, 3].map((value) => (
+                          <option key={value} value={value}>
+                            {value}x
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() =>
+                          toggleIngredientIncluded(slotKey, index, ingredientIndex)
+                        }
+                        disabled={disabled}
+                        className={`text-xs px-2 py-0.5 rounded border ${
+                          included
+                            ? 'border-yellow-600 text-yellow-300 hover:bg-yellow-900/20'
+                            : 'border-emerald-600 text-emerald-300 hover:bg-emerald-900/20'
+                        }`}
+                      >
+                        {included ? 'Excluir' : 'Incluir'}
+                      </button>
+                      <button
+                        onClick={() => removeIngredient(slotKey, index, ingredientIndex)}
+                        disabled={disabled}
+                        className={`text-xs p-1 rounded ${
+                          disabled
+                            ? 'text-slate-600 cursor-not-allowed'
+                            : 'text-red-400 hover:text-red-300 hover:bg-red-900/20'
+                        }`}
+                        title="Remover ingrediente"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <QuickAdd
+              onAdd={(ingredient) => addQuickIngredient(slotKey, index, ingredient)}
+              disabled={meal.isLocked}
+            />
+          </li>
+        );
+      }
+
+      function AddMealForm({ refreshLibrary, session }) {
+        const [name, setName] = useState('');
+        const [block, setBlock] = useState('350');
+        const [kcal, setKcal] = useState('');
+        const [protein, setProtein] = useState('');
+        const [carbs, setCarbs] = useState('');
+        const [fats, setFats] = useState('');
+        const [tags, setTags] = useState('');
+        const [loading, setLoading] = useState(false);
+        const [message, setMessage] = useState(null);
+
+        const isFormValid = name.trim() !== '' && block && (kcal || protein || carbs || fats);
+
+        const reset = () => {
+          setName('');
+          setBlock('350');
+          setKcal('');
+          setProtein('');
+          setCarbs('');
+          setFats('');
+          setTags('');
+        };
+
+        async function handleSubmit(event) {
+          event.preventDefault();
+          if (!isFormValid || loading) return;
+
+          setLoading(true);
+          setMessage(null);
+
+          const payload = {
+            name: name.trim(),
+            block,
+            kcal,
+            protein,
+            carbs,
+            fats,
+            tags,
+          };
+
+          const result = await addMealToDatabase(payload);
+
+          if (!result.success) {
+            setMessage({ type: 'error', text: result.error || 'Falha ao salvar.' });
+            setLoading(false);
+            return;
+          }
+
+          setMessage({ type: 'success', text: 'Refeição adicionada com sucesso!' });
+          reset();
+          setLoading(false);
+          await refreshLibrary();
+        }
+
+        return (
+          <Section
+            title="Adicionar refeição à biblioteca"
+            right={
+              <span className="text-xs text-slate-400">
+                Status: {session?.user ? 'logado' : 'offline'}
+              </span>
+            }
+          >
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {message && (
+                <div
+                  className={`md:col-span-2 text-xs px-3 py-2 rounded border ${
+                    message.type === 'success'
+                      ? 'border-emerald-500 text-emerald-300 bg-emerald-900/20'
+                      : 'border-red-500 text-red-300 bg-red-900/20'
+                  }`}
+                >
+                  {message.text}
+                </div>
+              )}
+
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Nome da refeição"
+                className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+              />
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={block}
+                  onChange={(event) => setBlock(event.target.value)}
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                >
+                  <option value="250">250 kcal</option>
+                  <option value="350">350 kcal</option>
+                  <option value="500">500 kcal</option>
+                  <option value="750">750 kcal</option>
+                </select>
+                <input
+                  type="number"
+                  value={kcal}
+                  onChange={(event) => setKcal(event.target.value)}
+                  placeholder="Total kcal"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm flex-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 md:col-span-2">
+                <input
+                  type="number"
+                  value={protein}
+                  onChange={(event) => setProtein(event.target.value)}
+                  placeholder="Proteína (g)"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={carbs}
+                  onChange={(event) => setCarbs(event.target.value)}
+                  placeholder="Carboidratos (g)"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={fats}
+                  onChange={(event) => setFats(event.target.value)}
+                  placeholder="Gorduras (g)"
+                  className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                />
+              </div>
+
+              <input
+                value={tags}
+                onChange={(event) => setTags(event.target.value)}
+                placeholder="Tags (separe por vírgula)"
+                className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm md:col-span-2"
+              />
+
+              <button
+                type="submit"
+                disabled={loading || !isFormValid}
+                className={`px-4 py-2 rounded font-semibold text-white md:col-span-2 ${
+                  loading || !isFormValid
+                    ? 'bg-slate-600 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {loading ? 'Adicionando...' : 'Adicionar à biblioteca (Supabase)'}
+              </button>
+            </form>
+          </Section>
+        );
+      }
+
+      // ---------------------------------------------------------------------
+      // Aplicativo principal
+      // ---------------------------------------------------------------------
+      function App() {
+        const uidRef = useRef('anon');
+        const [profile, setProfile] = useState(() =>
+          loadStateNS(STORAGE_KEYS.profile, uidRef.current, DEFAULT_PROFILE),
+        );
+        const [isProfileLocked, setIsProfileLocked] = useState(false);
+        const [slotKeys, setSlotKeys] = useState(() => {
+          const saved = loadStateNS(STORAGE_KEYS.slotKeys, uidRef.current, INITIAL_SLOT_KEYS);
+          return Array.isArray(saved) && saved.length ? saved : INITIAL_SLOT_KEYS;
+        });
+        const [currentDayId, setCurrentDayId] = useState(() =>
+          loadStateNS(STORAGE_KEYS.currentDayId, uidRef.current, INITIAL_DAY_ID),
+        );
+        const [allDays, setAllDays] = useState(() => {
+          const saved = loadStateNS(STORAGE_KEYS.allDays, uidRef.current, {});
+          if (!Object.keys(saved).length || !saved[INITIAL_DAY_ID]) {
+            return { [INITIAL_DAY_ID]: createInitialDayState(INITIAL_SLOT_KEYS) };
+          }
+          return saved;
+        });
+        const day = allDays[currentDayId] || createInitialDayState(slotKeys);
+        const [favorites, setFavorites] = useState(
+          () => new Set(loadState(STORAGE_KEYS.favorites, [])),
+        );
+        const [usage, setUsage] = useState(() =>
+          loadStateNS(STORAGE_KEYS.usage, uidRef.current, {}),
+        );
+
+        const [session, setSession] = useState(null);
+        const [authReady, setAuthReady] = useState(false);
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+        const [syncing, setSyncing] = useState(false);
+        const [typingNumeric, setTypingNumeric] = useState(false);
+        const [hydrated, setHydrated] = useState(false);
+        const [externalMeals, setExternalMeals] = useState([]);
+        const lastSnapshotRef = useRef(null);
+        const debounceRef = useRef(null);
+        const importInputRef = useRef(null);
+
+        useEffect(() => {
+          const loadSession = async () => {
+            const { data } = await supabase.auth.getSession();
+            setSession(data.session || null);
+            setAuthReady(true);
+            const subscription = supabase.auth.onAuthStateChange((_event, session) => {
+              setSession(session);
+              setAuthReady(true);
+            });
+            return subscription.data.subscription;
+          };
+
+          let unsub = null;
+          loadSession().then((subscription) => {
+            unsub = subscription;
+          });
+
+          return () => unsub?.unsubscribe();
+        }, []);
+
+        useEffect(() => {
+          const userId = session?.user?.id || 'anon';
+          if (uidRef.current === userId) return;
+
+          uidRef.current = userId;
+          setHydrated(false);
+
+          setProfile(loadStateNS(STORAGE_KEYS.profile, userId, DEFAULT_PROFILE));
+          const storedSlotKeys = loadStateNS(
+            STORAGE_KEYS.slotKeys,
+            userId,
+            INITIAL_SLOT_KEYS,
+          );
+          setSlotKeys(
+            Array.isArray(storedSlotKeys) && storedSlotKeys.length
+              ? storedSlotKeys
+              : INITIAL_SLOT_KEYS,
+          );
+          const storedDays = loadStateNS(STORAGE_KEYS.allDays, userId, {});
+          setAllDays(
+            Object.keys(storedDays).length
+              ? storedDays
+              : { [INITIAL_DAY_ID]: createInitialDayState(INITIAL_SLOT_KEYS) },
+          );
+          setCurrentDayId(loadStateNS(STORAGE_KEYS.currentDayId, userId, INITIAL_DAY_ID));
+          setFavorites(new Set(loadState(STORAGE_KEYS.favorites, [])));
+          setUsage(loadStateNS(STORAGE_KEYS.usage, userId, {}));
+        }, [session]);
+
+        useEffect(() => {
+          fetchExternalMeals({ force: false }).then(setExternalMeals);
+        }, []);
+
+        const refreshLibrary = async () => {
+          setExternalMeals(await fetchExternalMeals({ force: true }));
+        };
+
+        useEffect(() => saveStateNS(STORAGE_KEYS.profile, uidRef.current, profile), [profile]);
+        useEffect(() => saveStateNS(STORAGE_KEYS.allDays, uidRef.current, allDays), [allDays]);
+        useEffect(
+          () => saveStateNS(STORAGE_KEYS.currentDayId, uidRef.current, currentDayId),
+          [currentDayId],
+        );
+        useEffect(() => saveStateNS(STORAGE_KEYS.slotKeys, uidRef.current, slotKeys), [slotKeys]);
+        useEffect(
+          () => saveState(STORAGE_KEYS.favorites, Array.from(favorites)),
+          [favorites],
+        );
+        useEffect(() => saveStateNS(STORAGE_KEYS.usage, uidRef.current, usage), [usage]);
+
+        const [search, setSearch] = useState('');
+        const [searchInIngredients, setSearchInIngredients] = useState(true);
+        const [selectedBlock, setSelectedBlock] = useState('all');
+        const [activeTags, setActiveTags] = useState([]);
+        const [onlyFavorites, setOnlyFavorites] = useState(false);
+        const [orderBy, setOrderBy] = useState('relevance');
+        const [minProfile, setMinProfile] = useState(false);
+        const [minMacros, setMinMacros] = useState(false);
+        const [minLibrary, setMinLibrary] = useState(false);
+        const [minDay, setMinDay] = useState(false);
+
+        const unit = { weight: 'kg', length: 'cm' };
+
+        const safeProfile = useMemo(() => {
+          const base = { ...profile, unitSystem: 'metric' };
+          return {
+            ...base,
+            age: toNumber(base.age),
+            weight: toNumber(base.weight),
+            height: toNumber(base.height),
+            neck: toNumber(base.neck),
+            waist: toNumber(base.waist),
+            hip: toNumber(base.hip),
+          };
+        }, [profile]);
+
+        const bmr = useMemo(() => calcBMR(safeProfile), [safeProfile]);
+        const tdee = useMemo(() => calcTDEE(bmr, safeProfile.activity), [bmr, safeProfile.activity]);
+        const targetCalories = useMemo(
+          () => round(adjustForGoal(tdee, safeProfile.goal)),
+          [tdee, safeProfile.goal],
+        );
+        const macroTargets = useMemo(
+          () => deriveMacroTargets({ weight: safeProfile.weight, calories: targetCalories }),
+          [safeProfile.weight, targetCalories],
+        );
+        const body = useMemo(
+          () =>
+            calcBodyFat({
+              sex: safeProfile.sex,
+              height: safeProfile.height,
+              neck: safeProfile.neck,
+              waist: safeProfile.waist,
+              hip: safeProfile.hip,
+              weight: safeProfile.weight,
+            }),
+          [
+            safeProfile.sex,
+            safeProfile.height,
+            safeProfile.neck,
+            safeProfile.waist,
+            safeProfile.hip,
+            safeProfile.weight,
+          ],
+        );
+
+        const libraryWithTotals = useMemo(() => {
+          const enriched = externalMeals.map((meal) => {
+            const totals = (meal.ingredients || []).reduce(
+              (accumulator, ingredient) => {
+                const p = +ingredient.protein || 0;
+                const c = +ingredient.carbs || 0;
+                const f = +ingredient.fats || 0;
+                const base = +ingredient.baseKcal || p * 4 + c * 4 + f * 9;
+                const portion = +ingredient.portion || 1;
+                accumulator.kcal += base * portion;
+                accumulator.protein += p * portion;
+                accumulator.carbs += c * portion;
+                accumulator.fats += f * portion;
+                return accumulator;
+              },
+              { kcal: 0, protein: 0, carbs: 0, fats: 0 },
+            );
+
+            return {
+              ...meal,
+              ...totals,
+              fav: favorites.has(meal.id),
+              used: usage[meal.id] || 0,
+            };
+          });
+
+          let list = enriched.filter((meal) => {
+            const blockOk =
+              selectedBlock === 'all' || String(meal.block).trim() === String(selectedBlock).trim();
+            const tagOk =
+              activeTags.length === 0 || activeTags.every((tag) => (meal.tags || []).includes(tag));
+            const term = search.trim().toLowerCase();
+            const inName = (meal.name || '').toLowerCase().includes(term);
+            const inIngredients =
+              searchInIngredients &&
+              (meal.ingredients || []).some((ingredient) =>
+                (ingredient.name || '').toLowerCase().includes(term),
+              );
+            const searchOk = term ? inName || inIngredients : true;
+            const favoriteOk = !onlyFavorites || meal.fav;
+            return blockOk && tagOk && searchOk && favoriteOk;
+          });
+
+          if (orderBy === 'kcal-asc') list.sort((a, b) => a.kcal - b.kcal);
+          else if (orderBy === 'kcal-desc') list.sort((a, b) => b.kcal - a.kcal);
+          else if (orderBy === 'protein') list.sort((a, b) => b.protein - a.protein);
+          else if (orderBy === 'most-used') list.sort((a, b) => (b.used || 0) - (a.used || 0));
+
+          return list;
+        }, [
+          externalMeals,
+          favorites,
+          usage,
+          selectedBlock,
+          activeTags,
+          search,
+          searchInIngredients,
+          onlyFavorites,
+          orderBy,
+        ]);
+
+        function sumIngredients(list) {
+          return list.reduce(
+            (accumulator, ingredient) => {
+              if (ingredient.included === false) return accumulator;
+              const p = +ingredient.protein || 0;
+              const c = +ingredient.carbs || 0;
+              const f = +ingredient.fats || 0;
+              const base = +ingredient.baseKcal || p * 4 + c * 4 + f * 9;
+              const portion = +ingredient.portion || 1;
+              accumulator.kcal += base * portion;
+              accumulator.protein += p * portion;
+              accumulator.carbs += c * portion;
+              accumulator.fats += f * portion;
+              return accumulator;
+            },
+            { kcal: 0, protein: 0, carbs: 0, fats: 0 },
+          );
+        }
+
+        const slotTotals = useMemo(() => {
+          const totals = {};
+          slotKeys.forEach((key) => {
+            const meals = day[key] || [];
+            const sum = meals.reduce(
+              (accumulator, meal) => {
+                const partial = sumIngredients(meal.ingredients || []);
+                accumulator.kcal += partial.kcal;
+                accumulator.protein += partial.protein;
+                accumulator.carbs += partial.carbs;
+                accumulator.fats += partial.fats;
+                return accumulator;
+              },
+              { kcal: 0, protein: 0, carbs: 0, fats: 0 },
+            );
+            totals[key] = sum;
+          });
+          return totals;
+        }, [day, slotKeys]);
+
+        const totals = useMemo(
+          () =>
+            Object.values(slotTotals).reduce(
+              (accumulator, value) => ({
+                kcal: accumulator.kcal + value.kcal,
+                protein: accumulator.protein + value.protein,
+                carbs: accumulator.carbs + value.carbs,
+                fats: accumulator.fats + value.fats,
+              }),
+              { kcal: 0, protein: 0, carbs: 0, fats: 0 },
+            ),
+          [slotTotals],
+        );
+
+        const getSlotLabel = (key) => `Refeição ${slotKeys.indexOf(key) + 1}`;
+        const updateDay = (next) => setAllDays((previous) => ({ ...previous, [currentDayId]: next }));
+        const getMeta = (value) => ({ waterMl: 0, sleepH: 0, ...(value?.meta || {}) });
+
+        const addWater = (ml) => {
+          const meta = getMeta(day);
+          const next = {
+            ...day,
+            meta: { ...meta, waterMl: Math.max(0, (meta.waterMl || 0) + ml) },
+          };
+          updateDay(next);
+        };
+
+        const setWater = (ml) => {
+          const meta = getMeta(day);
+          const next = {
+            ...day,
+            meta: { ...meta, waterMl: Math.max(0, +ml || 0) },
+          };
+          updateDay(next);
+        };
+
+        const setSleep = (hours) => {
+          const meta = getMeta(day);
+          const value = Math.min(12, Math.max(0, +hours || 0));
+          const next = {
+            ...day,
+            meta: { ...meta, sleepH: value },
+          };
+          updateDay(next);
+        };
+
+        const deepCopy = (object) => JSON.parse(JSON.stringify(object));
+
+        const addTo = (slotKey, meal) => {
+          const baseIngredients = (meal.ingredients || []).map((item) => ({
+            ...item,
+            portion: 1,
+            included: true,
+          }));
+
+          const entry = {
+            mealId: meal.id,
+            name: meal.name,
+            isLocked: false,
+            ingredients: deepCopy(baseIngredients),
+            originalIngredients: deepCopy(baseIngredients),
+          };
+
+          updateDay({ ...day, [slotKey]: [...(day[slotKey] || []), entry] });
+          setUsage((previous) => ({ ...previous, [meal.id]: (previous[meal.id] || 0) + 1 }));
+        };
+
+        const removeMeal = (slotKey, index) =>
+          updateDay({ ...day, [slotKey]: day[slotKey].filter((_, idx) => idx !== index) });
+
+        const toggleLock = (slotKey, index) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) =>
+              idx === index ? { ...meal, isLocked: !meal.isLocked } : meal,
+            ),
+          });
+
+        const duplicateMealTo = (fromKey, index, toKey) => {
+          const meal = day[fromKey][index];
+          const copy = deepCopy(meal);
+          updateDay({ ...day, [toKey]: [...(day[toKey] || []), copy] });
+        };
+
+        const updateIngredientPortion = (slotKey, mealIndex, ingredientIndex, portion) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) =>
+              idx !== mealIndex || meal.isLocked
+                ? meal
+                : {
+                    ...meal,
+                    ingredients: meal.ingredients.map((ingredient, ingredientIdx) =>
+                      ingredientIdx === ingredientIndex
+                        ? { ...ingredient, portion: Number(portion) }
+                        : ingredient,
+                    ),
+                  },
+            ),
+          });
+
+        const toggleIngredientIncluded = (slotKey, mealIndex, ingredientIndex) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) => {
+              if (idx !== mealIndex || meal.isLocked) return meal;
+              const nextIngredients = meal.ingredients.map((ingredient, ingredientIdx) =>
+                ingredientIdx === ingredientIndex
+                  ? { ...ingredient, included: !(ingredient.included !== false) }
+                  : ingredient,
+              );
+              return { ...meal, ingredients: nextIngredients };
+            }),
+          });
+
+        const resetMealIngredients = (slotKey, index) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) =>
+              idx !== index
+                ? meal
+                : { ...meal, ingredients: deepCopy(meal.originalIngredients || []), isLocked: false },
+            ),
+          });
+
+        const removeIngredient = (slotKey, mealIndex, ingredientIndex) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) =>
+              idx !== mealIndex || meal.isLocked
+                ? meal
+                : {
+                    ...meal,
+                    ingredients: meal.ingredients.filter((_, ingredientIdx) => ingredientIdx !== ingredientIndex),
+                  },
+            ),
+          });
+
+        const addQuickIngredient = (slotKey, mealIndex, ingredient) =>
+          updateDay({
+            ...day,
+            [slotKey]: day[slotKey].map((meal, idx) =>
+              idx !== mealIndex || meal.isLocked
+                ? meal
+                : {
+                    ...meal,
+                    ingredients: [
+                      ...meal.ingredients,
+                      {
+                        name: ingredient.name,
+                        baseKcal:
+                          ingredient.baseKcal ||
+                          ingredient.protein * KCAL_PER_GRAM.protein +
+                            ingredient.carbs * KCAL_PER_GRAM.carbs +
+                            ingredient.fats * KCAL_PER_GRAM.fats,
+                        protein: ingredient.protein,
+                        carbs: ingredient.carbs,
+                        fats: ingredient.fats,
+                        portion: ingredient.portion || 1,
+                        included: true,
+                      },
+                    ],
+                  },
+            ),
+          });
+
+        const duplicateCurrentDay = () => {
+          const nextId = `day-${Object.keys(allDays).length + 1}`;
+          const copy = JSON.parse(JSON.stringify(day));
+          setAllDays((previous) => ({ ...previous, [nextId]: copy }));
+          setCurrentDayId(nextId);
+        };
+
+        const resetDay = () => {
+          if (!window.confirm('Deseja realmente resetar o dia atual?')) return;
+          updateDay(createInitialDayState(slotKeys));
+        };
+
+        const addSlot = () => {
+          if (slotKeys.length >= 8) return;
+          const nextKey = `slot-${slotKeys.length + 1}`;
+          setSlotKeys((previous) => [...previous, nextKey]);
+          updateDay({ ...day, [nextKey]: [] });
+        };
+
+        const removeSlot = (key) => {
+          if (slotKeys.length <= 1) return;
+          const filtered = slotKeys.filter((item) => item !== key);
+          setSlotKeys(filtered);
+          const { [key]: _removed, ...rest } = day;
+          updateDay(rest);
+        };
+
+        const toggleFavorite = (id) =>
+          setFavorites((previous) => {
+            const next = new Set(previous);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          });
+
+        const snapshot = () =>
+          JSON.stringify({
+            profile,
+            allDays,
+            slotKeys,
+            currentDayId,
+            favorites: Array.from(favorites),
+            usage,
+          });
+
+        const exportDay = () => {
+          const payload = { version: '6.0', day, slotKeys };
+          const blob = new Blob([JSON.stringify(payload, null, 2)], {
+            type: 'application/json',
+          });
+          const anchor = document.createElement('a');
+          anchor.href = URL.createObjectURL(blob);
+          anchor.download = `cardapio_${currentDayId}.json`;
+          anchor.click();
+          setTimeout(() => URL.revokeObjectURL(anchor.href), 1500);
+        };
+
+        const importDay = (file) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const data = JSON.parse(reader.result);
+              if (!data?.day) throw new Error('Arquivo inválido');
+              const keys = Array.isArray(data.slotKeys) && data.slotKeys.length ? data.slotKeys : slotKeys;
+              setSlotKeys(keys);
+              updateDay(data.day);
+              alert('Dia importado com sucesso!');
+            } catch (error) {
+              alert('Falha ao importar: ' + (error?.message || ''));
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        const signInPassword = async () => {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) alert(error.message);
+        };
+
+        const signUpPassword = async () => {
+          const { error } = await supabase.auth.signUp({ email, password });
+          if (error) alert(error.message);
+        };
+
+        const signOut = async () => {
+          await supabase.auth.signOut();
+        };
+
+        const loadCloud = async () => {
+          if (!session) return;
+          setSyncing(true);
+          const { data, error } = await supabase
+            .from('user_state')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          if (error) {
+            setSyncing(false);
+            setHydrated(true);
+            return;
+          }
+          if (!data) {
+            await supabase.from('user_state').insert({
+              user_id: session.user.id,
+              profile,
+              all_days: allDays,
+              slot_keys: slotKeys,
+              current_day_id: currentDayId,
+              favorites: Array.from(favorites),
+              usage,
+            });
+            lastSnapshotRef.current = snapshot();
+            setSyncing(false);
+            setHydrated(true);
+            return;
+          }
+
+          try {
+            const p = data.profile || DEFAULT_PROFILE;
+            const d = data.all_days || {};
+            const s = Array.isArray(data.slot_keys) ? data.slot_keys : INITIAL_SLOT_KEYS;
+            const cid = data.current_day_id || INITIAL_DAY_ID;
+            const fav = new Set(
+              Array.isArray(data.favorites) ? data.favorites : Array.from(favorites),
+            );
+            const u = data.usage || usage;
+            setProfile(p);
+            setAllDays(
+              Object.keys(d).length
+                ? d
+                : { [INITIAL_DAY_ID]: createInitialDayState(INITIAL_SLOT_KEYS) },
+            );
+            setSlotKeys(s.length ? s : INITIAL_SLOT_KEYS);
+            setCurrentDayId(cid);
+            setFavorites(fav);
+            setUsage(u);
+            lastSnapshotRef.current = JSON.stringify({
+              profile: p,
+              allDays: d,
+              slotKeys: s,
+              currentDayId: cid,
+              favorites: Array.from(fav),
+              usage: u,
+            });
+          } finally {
+            setSyncing(false);
+            setHydrated(true);
+          }
+        };
+
+        const saveCloudNow = async () => {
+          if (!session) return;
+          setSyncing(true);
+          await supabase.from('user_state').upsert(
+            {
+              user_id: session.user.id,
+              profile,
+              all_days: allDays,
+              slot_keys: slotKeys,
+              current_day_id: currentDayId,
+              favorites: Array.from(favorites),
+              usage,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' },
+          );
+          lastSnapshotRef.current = snapshot();
+          setSyncing(false);
+        };
+
+        useEffect(() => {
+          if (session) loadCloud();
+        }, [session]);
+
+        useEffect(() => {
+          if (!session || !hydrated) return;
+          if (typingNumeric) return;
+          const snap = snapshot();
+          if (snap === lastSnapshotRef.current) return;
+          clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            saveCloudNow();
+          }, 1200);
+          return () => clearTimeout(debounceRef.current);
+        }, [profile, allDays, slotKeys, currentDayId, favorites, usage, session, typingNumeric, hydrated]);
+
+        function getExt(name) {
+          const parts = (name || '').split('.');
+          return (parts.length > 1 ? parts.pop() : 'webp').toLowerCase();
+        }
+
+        const onPhoto = async (event) => {
+          if (isProfileLocked) return;
+          const file = event.target.files?.[0];
+          if (!file) return;
+          if (!session?.user?.id) {
+            alert('Faça login para salvar sua foto.');
+            return;
+          }
+
+          const worker = new Worker(workerURL);
+          const compressed = await new Promise((resolve) => {
+            const t = setTimeout(() => resolve(null), 15000);
+            worker.onmessage = (ev) => {
+              clearTimeout(t);
+              if (ev.data?.ok) resolve(ev.data.blob);
+              else resolve(null);
+              worker.terminate();
+            };
+            worker.postMessage({ file });
+          });
+
+          const blob = compressed || file;
+          const userId = session.user.id;
+          const ext = getExt(file.name);
+          const path = `u/${userId}/avatar.${ext === 'jpg' ? 'jpg' : 'webp'}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from(SUPABASE_CONFIG.avatarBucket)
+            .upload(path, blob, { cacheControl: '3600', upsert: true });
+          if (uploadError) {
+            alert('Falha no upload: ' + uploadError.message);
+            return;
+          }
+
+          const { data: publicData } = supabase.storage
+            .from(SUPABASE_CONFIG.avatarBucket)
+            .getPublicUrl(path);
+          const publicUrl = publicData.publicUrl;
+
+          const nextProfile = { ...profile, photoUrl: publicUrl, photoUpdatedAt: Date.now() };
+          setProfile(nextProfile);
+
+          await supabase.from('user_state').upsert(
+            {
+              user_id: userId,
+              profile: nextProfile,
+              all_days: allDays,
+              slot_keys: slotKeys,
+              current_day_id: currentDayId,
+              favorites: Array.from(favorites),
+              usage,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' },
+          );
+          lastSnapshotRef.current = snapshot();
+        };
+
+        const handleProfileChangeLive = (key, value) => {
+          if (isProfileLocked) return;
+          setTypingNumeric(/^(age|weight|height|neck|waist|hip)$/.test(key));
+          setProfile((prev) => ({ ...prev, [key]: value }));
+        };
+
+        const handleProfileBlur = (key) => {
+          setTypingNumeric(false);
+          setProfile((prev) => {
+            if (['sex', 'activity', 'goal', 'photoUrl', 'unitSystem', 'photoUpdatedAt'].includes(key)) {
+              return prev;
+            }
+            return { ...prev, [key]: normalizeOnBlur(key, prev[key]) };
+          });
+        };
+
+        const WATER_GOAL = 3000;
+        const SLEEP_GOAL = 8;
+        const water = Math.max(0, day?.meta?.waterMl ?? 0);
+        const sleep = Math.max(0, day?.meta?.sleepH ?? 0);
+        const waterPct = Math.min(100, (water / WATER_GOAL) * 100);
+        const sleepPct = Math.min(100, (sleep / SLEEP_GOAL) * 100);
+
+        if (authReady && !session) {
+          return (
+            <div className="min-h-screen flex items-center justify-center bg-[#050615] px-4">
+              <div className="w-full max-w-md bg-slate-800/70 rounded-2xl p-6 border border-slate-700/60 shadow">
+                <h1 className="text-xl font-semibold text-slate-100 mb-1 text-center">Cardápio Inteligente</h1>
+                <p className="text-xs text-slate-400 mb-5 text-center">
+                  Entre para acessar seu perfil, biblioteca e dias salvos.
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  <input
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="seu@email.com"
+                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="senha"
+                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                  />
+
+                  <button
+                    onClick={signInPassword}
+                    className="text-sm px-3 py-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    Entrar
+                  </button>
+                  <button
+                    onClick={signUpPassword}
+                    className="text-sm px-3 py-2 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10"
+                  >
+                    Criar conta
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-4 text-center">
+                  Suas informações ficam salvas na nuvem e só aparecem quando você estiver logado.
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="min-h-screen">
+            <header className="px-6 py-5 border-b border-slate-700/60 sticky top-0 bg-[#050615]/90 backdrop-blur z-20">
+              <div className="max-w-7xl mx-auto flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold">Cardápio Inteligente</h1>
+                  <p className="text-sm text-slate-400">v6.3 • Biblioteca Supabase + sincronização</p>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400">Unidades:</span>
+                    <span className="px-2 py-1 rounded border border-slate-600 bg-slate-800/40">cm/kg</span>
+                  </div>
+
+                  {authReady && (!session ? (
+                    <>
+                      <input
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="seu@email.com"
+                        className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-44"
+                      />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="senha"
+                        className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm w-36"
+                      />
+                      <button
+                        onClick={signInPassword}
+                        className="text-sm px-3 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10"
+                      >
+                        Entrar
+                      </button>
+                      <button
+                        onClick={signUpPassword}
+                        className="text-sm px-3 py-1 rounded border border-blue-500 text-blue-300 hover:bg-blue-500/10"
+                      >
+                        Criar conta
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-slate-400 hidden md:block">{session.user.email}</span>
+                      <button
+                        onClick={saveCloudNow}
+                        disabled={syncing}
+                        className={`text-sm px-3 py-1 rounded border ${
+                          syncing
+                            ? 'border-slate-700 text-slate-500'
+                            : 'border-blue-500 text-blue-300 hover:bg-blue-500/10'
+                        }`}
+                      >
+                        {syncing ? (
+                          <span className="inline-flex items-center gap-2">
+                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                              <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-25"></circle>
+                              <path d="M4 12a8 8 0 018-8" strokeWidth="2" className="opacity-75"></path>
+                            </svg>
+                            Salvando…
+                          </span>
+                        ) : (
+                          'Salvar agora'
+                        )}
+                      </button>
+                      <button
+                        onClick={signOut}
+                        className="text-sm px-3 py-1 rounded border border-red-500 text-red-300 hover:bg-red-500/10"
+                      >
+                        Sair
+                      </button>
+                    </>
+                  ))}
+                  <a href="#biblioteca" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">
+                    Biblioteca
+                  </a>
+                  <a href="#meu-dia" className="hide-mobile text-sm px-3 py-1 rounded border border-slate-600 hover:bg-slate-700/40">
+                    Meu Dia
+                  </a>
+                </div>
+              </div>
+            </header>
+
+            <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1 flex flex-col gap-6">
+                <Section
+                  title="Seu Perfil"
+                  right={
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setIsProfileLocked((value) => !value)}
+                        className={`text-xs px-2 py-0.5 rounded border ${
+                          isProfileLocked
+                            ? 'border-red-500 text-red-300 bg-red-900/20'
+                            : 'border-emerald-500 text-emerald-300 bg-emerald-900/20'
+                        }`}
+                      >
+                        {isProfileLocked ? 'Editar' : 'Trancar Perfil'}
+                      </button>
+                      <MinButton on={minProfile} toggle={() => setMinProfile((value) => !value)} />
+                    </div>
+                  }
+                >
+                  {!minProfile && (
+                    <div className="grid gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <img
+                            src={profile.photoUrl}
+                            alt="Avatar"
+                            className="w-24 h-24 rounded-full border border-slate-700 object-cover"
+                          />
+                          <label
+                            className={`absolute bottom-0 right-0 bg-emerald-600 text-white text-xs px-2 py-1 rounded cursor-pointer ${
+                              isProfileLocked ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            Foto
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={onPhoto}
+                              disabled={isProfileLocked}
+                            />
+                          </label>
+                        </div>
+                        <div className="flex-1 grid grid-cols-2 gap-3 text-xs">
+                          <label className="grid gap-1">
+                            <span className="text-slate-400">Sexo</span>
+                            <select
+                              value={profile.sex}
+                              onChange={(event) => handleProfileChangeLive('sex', event.target.value)}
+                              onBlur={() => handleProfileBlur('sex')}
+                              disabled={isProfileLocked}
+                              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                            >
+                              <option value="M">Masculino</option>
+                              <option value="F">Feminino</option>
+                            </select>
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-slate-400">Idade</span>
+                            <input
+                              type="number"
+                              value={profile.age}
+                              onChange={(event) => handleProfileChangeLive('age', event.target.value)}
+                              onBlur={() => handleProfileBlur('age')}
+                              disabled={isProfileLocked}
+                              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-slate-400">Peso ({unit.weight})</span>
+                            <input
+                              type="number"
+                              value={profile.weight}
+                              onChange={(event) => handleProfileChangeLive('weight', event.target.value)}
+                              onBlur={() => handleProfileBlur('weight')}
+                              disabled={isProfileLocked}
+                              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-slate-400">Altura ({unit.length})</span>
+                            <input
+                              type="number"
+                              value={profile.height}
+                              onChange={(event) => handleProfileChangeLive('height', event.target.value)}
+                              onBlur={() => handleProfileBlur('height')}
+                              disabled={isProfileLocked}
+                              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <label className="grid gap-1">
+                          <span className="text-slate-400">Pescoço ({unit.length})</span>
+                          <input
+                            type="number"
+                            value={profile.neck}
+                            onChange={(event) => handleProfileChangeLive('neck', event.target.value)}
+                            onBlur={() => handleProfileBlur('neck')}
+                            disabled={isProfileLocked}
+                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-slate-400">Cintura ({unit.length})</span>
+                          <input
+                            type="number"
+                            value={profile.waist}
+                            onChange={(event) => handleProfileChangeLive('waist', event.target.value)}
+                            onBlur={() => handleProfileBlur('waist')}
+                            disabled={isProfileLocked}
+                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                          />
+                        </label>
+                        {profile.sex === 'F' && (
+                          <label className="grid gap-1">
+                            <span className="text-slate-400">Quadril ({unit.length})</span>
+                            <input
+                              type="number"
+                              value={profile.hip}
+                              onChange={(event) => handleProfileChangeLive('hip', event.target.value)}
+                              onBlur={() => handleProfileBlur('hip')}
+                              disabled={isProfileLocked}
+                              className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                            />
+                          </label>
+                        )}
+                        <label className="grid gap-1">
+                          <span className="text-slate-400">Objetivo</span>
+                          <select
+                            value={profile.goal}
+                            onChange={(event) => handleProfileChangeLive('goal', event.target.value)}
+                            onBlur={() => handleProfileBlur('goal')}
+                            disabled={isProfileLocked}
+                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                          >
+                            <option value="loss">Cutting</option>
+                            <option value="recomp">Recomp</option>
+                            <option value="gain">Bulking</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        <label className="grid gap-1 text-xs">
+                          <span className="text-slate-400">Atividade</span>
+                          <select
+                            value={profile.activity}
+                            onChange={(event) => handleProfileChangeLive('activity', event.target.value)}
+                            onBlur={() => handleProfileBlur('activity')}
+                            disabled={isProfileLocked}
+                            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
+                          >
+                            <option value="sedentary">Sedentário</option>
+                            <option value="light">Leve</option>
+                            <option value="moderate">Moderado</option>
+                            <option value="active">Ativo</option>
+                            <option value="very">Muito Ativo</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded bg-slate-900 border border-slate-700">
+                          <div className="text-slate-400">TDEE alvo</div>
+                          <div className="text-xl font-semibold text-emerald-400">{round(targetCalories)}</div>
+                          <div className="text-slate-500 text-xs">kcal/dia</div>
+                        </div>
+                        <div className="p-3 rounded bg-slate-900 border border-slate-700">
+                          <div className="text-slate-400">Macros alvo</div>
+                          <div className="text-sm text-slate-300">
+                            P {macroTargets.protein} • C {macroTargets.carbs} • G {macroTargets.fats}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 p-4 rounded-xl bg-slate-900 border border-slate-700">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-slate-300 font-semibold">Composição Corporal (US Navy)</span>
+                          <span className="text-xs text-slate-500">auto • cm</span>
+                        </div>
+                        {body.bf == null ? (
+                          <div className="text-xs text-slate-500">
+                            Preencha altura, pescoço, cintura {profile.sex === 'F' ? 'e quadril ' : ''}para estimar a % de gordura.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                              <div className="text-slate-400 text-xs">% Gordura</div>
+                              <div className="text-2xl font-bold text-amber-300">{body.bf}%</div>
                             </div>
-                            <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">{m.block} kcal</span>
+                            <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                              <div className="text-slate-400 text-xs">Massa Magra</div>
+                              <div className="text-xl font-semibold">{body.lm} kg</div>
+                            </div>
+                            <div className="p-3 rounded bg-slate-800 border border-slate-700">
+                              <div className="text-slate-400 text-xs">Massa Gorda</div>
+                              <div className="text-xl font-semibold">{body.fm} kg</div>
+                            </div>
                           </div>
-                          <div className="mt-2 meal-tags flex flex-wrap gap-2">
-                            {(m.tags||[]).map(t => (
-                              <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300">{t}</span>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2 justify-end">
-                            {session?.user?.id && m.created_by === session.user.id && (
-                              <button
-                                onClick={() => deleteMealFromDB(m.id).then(r => r.ok && refreshLibrary())}
-                                className="px-2 py-1 text-xs rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10"
-                                title="Excluir definitivamente (somente suas próprias refeições)">
-                                🗑️ Excluir
-                              </button>
-                            )}
-                            {slotKeys.map(k => (
-                              <button key={k} onClick={()=> addTo(k, m)}
-                                      className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">
-                                + {`Refeição ${slotKeys.indexOf(k)+1}`}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {LIB_WITH_TOTALS.length===0 && (
-                        <div className="text-slate-400 text-sm md:col-span-2 p-4 border border-dashed border-slate-700 rounded-xl text-center">
-                          Nenhuma refeição encontrada. Ajuste filtros/busca ou adicione dados ao Supabase.
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </Section>
 
-                {/* MEU DIA */}
-                <Section
-                  title="Meu Dia"
-                  right={
-                    <div className="flex gap-2 flex-wrap justify-end">
-                      <select value={currentDayId} onChange={(e)=> setCurrentDayId(e.target.value)}
-                              className="bg-slate-900 border border-blue-600 rounded px-3 py-1 text-sm text-blue-300 font-semibold">
-                        {Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10))).map(id => <option key={id} value={id}>{`Dia ${Object.keys(allDays).sort((a,b)=> (parseInt(a.split('-')[1]||'0',10) - parseInt(b.split('-')[1]||'0',10))).indexOf(id)+1}`}</option>)}
-                      </select>
-                      <button onClick={duplicateCurrentDay} className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40">Duplicar</button>
-                      <button onClick={resetDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40">Resetar</button>
-                      <button onClick={exportDay} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Exportar Dia</button>
-                      <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files[0] && importDay(e.target.files[0])}/>
-                      <button onClick={()=> importInputRef.current?.click()} className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Importar Dia</button>
-                      <button onClick={addSlot} disabled={slotKeys.length>=8}
-                              className={`text-sm px-3 py-1 rounded border ${slotKeys.length>=8?'border-slate-700 text-slate-600 cursor-not-allowed':'border-blue-500 text-blue-300 hover:bg-blue-500/10'}`}>
-                        + Refeição
-                      </button>
-                      <MinBtn on={minDay} toggle={()=> setMinDay(v=>!v)}/>
-                    </div>
-                  }>
-                  {!minDay && (
+                <Section title="Metas de Macros" right={<MinButton on={minMacros} toggle={() => setMinMacros((value) => !value)} />}>
+                  {!minMacros && (
                     <>
-                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                          <div className="flex items-center justify-between">
-                            <div className="text-slate-300 font-semibold">Água</div>
-                            <div className="text-xs text-slate-400">{round(water)} / {WATER_GOAL} ml</div>
-                          </div>
-                          <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
-                            <div style={{ width: `${waterPct}%` }} className="h-3 bg-emerald-500"></div>
-                          </div>
-                          <div className="mt-3 flex gap-2 flex-wrap">
-                            <button onClick={()=> addWater(250)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+250</button>
-                            <button onClick={()=> addWater(500)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+500</button>
-                            <button onClick={()=> addWater(750)} className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20">+750</button>
-                            <input type="number" value={water} onChange={(e)=> setWater(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
-                            <button onClick={()=> setWater(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-                          </div>
-                        </div>
-                        <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
-                          <div className="flex items-center justify-between">
-                            <div className="text-slate-300 font-semibold">Sono (noite anterior)</div>
-                            <div className="text-xs text-slate-400">{round(sleep,1)} / {SLEEP_GOAL} h</div>
-                          </div>
-                          <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
-                            <div style={{ width: `${sleepPct}%` }} className="h-3 bg-indigo-500"></div>
-                          </div>
-                          <div className="mt-3 flex gap-2 flex-wrap items-center">
-                            <button onClick={()=> setSleep(Math.min(12, sleep + 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">+0,5h</button>
-                            <button onClick={()=> setSleep(Math.max(0, sleep - 0.5))} className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20">-0,5h</button>
-                            <input type="number" step="0.5" min="0" max="12" value={sleep} onChange={(e)=> setSleep(e.target.value)} className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"/>
-                            <button onClick={()=> setSleep(0)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40">Reset</button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
-                        {slotKeys.map(key => (
-                          <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="font-semibold text-slate-100 flex items-center gap-3">
-                                <span>{getSlotLabel(key)}</span>
-                                <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
-                                  {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
-                                </span>
-                              </div>
-                              {slotKeys.length>1 && (
-                                <button onClick={()=> removeSlot(key)} className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20">Remover Slot</button>
-                              )}
-                            </div>
-
-                            {(!day[key] || day[key].length===0) ? (
-                              <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">Vazio — adicione refeições da biblioteca.</div>
-                            ) : (
-                              <ul className="space-y-3">
-                                {day[key].map((meal, i) => (
-                                  <MealItem key={`${key}-${i}`} slotKey={key} index={i} meal={meal}
-                                            slotKeys={slotKeys} round={round}
-                                            resetMealIngredients={resetMealIngredients}
-                                            duplicateMealTo={duplicateMealTo}
-                                            toggleLock={toggleLock}
-                                            removeMeal={removeMeal}
-                                            updateIngredientPortion={updateIngredientPortion}
-                                            toggleIngredientIncluded={toggleIngredientIncluded}
-                                            removeIngredient={removeIngredient}
-                                            addQuickIngredient={addQuickIngredient}
-                                            getSlotLabel={getSlotLabel}/>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
-                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Calorias</div><div className="text-xl font-bold">{round(totals.kcal)}</div></div>
-                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Proteínas</div><div className="text-xl font-bold">{round(totals.protein)} g</div></div>
-                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Carboidratos</div><div className="text-xl font-bold">{round(totals.carbs)} g</div></div>
-                        <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center"><div className="text-slate-400 text-xs">Gorduras</div><div className="text-xl font-bold">{round(totals.fats)} g</div></div>
-                      </div>
+                      <Stat label="Calorias" value={totals.kcal} unit=" kcal" target={targetCalories} />
+                      <Stat label="Proteínas" value={totals.protein} unit=" g" target={macroTargets.protein} />
+                      <Stat label="Carboidratos" value={totals.carbs} unit=" g" target={macroTargets.carbs} />
+                      <Stat label="Gorduras" value={totals.fats} unit=" g" target={macroTargets.fats} />
                     </>
                   )}
                 </Section>
               </div>
-            </div>
-          </main>
 
-          <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
-            v6.2 — Biblioteca dinâmica (Supabase) com inserir/excluir e sincronização de estado na nuvem.
-          </footer>
-        </div>
-      );
-    }
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                <AddMealForm refreshLibrary={refreshLibrary} session={session} />
 
-    // ==== Montagem ====
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
-</body>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <Section
+                    title="Biblioteca de Refeições"
+                    right={
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Buscar..."
+                          className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm w-40"
+                        />
+                        <label className="text-xs flex items-center gap-1 text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={searchInIngredients}
+                            onChange={(event) => setSearchInIngredients(event.target.checked)}
+                          />
+                          buscar em ingredientes
+                        </label>
+                        <select
+                          value={selectedBlock}
+                          onChange={(event) => setSelectedBlock(event.target.value)}
+                          className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm"
+                        >
+                          <option value="all">Todos</option>
+                          <option value="250">250</option>
+                          <option value="350">350</option>
+                          <option value="500">500</option>
+                          <option value="750">750</option>
+                        </select>
+                        <select
+                          value={orderBy}
+                          onChange={(event) => setOrderBy(event.target.value)}
+                          className="bg-slate-900 border border-slate-600 rounded px-2 py-2 text-sm"
+                        >
+                          <option value="relevance">Relevância</option>
+                          <option value="kcal-asc">kcal ↑</option>
+                          <option value="kcal-desc">kcal ↓</option>
+                          <option value="protein">Proteína ↓</option>
+                          <option value="most-used">Mais usadas</option>
+                        </select>
+                        <label className="text-xs flex items-center gap-1 text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={onlyFavorites}
+                            onChange={(event) => setOnlyFavorites(event.target.checked)}
+                          />
+                          favoritos
+                        </label>
+                        <button
+                          onClick={refreshLibrary}
+                          className="text-xs px-2 py-1 rounded border border-slate-600 hover:bg-slate-700/40"
+                        >
+                          Atualizar
+                        </button>
+                        <MinButton on={minLibrary} toggle={() => setMinLibrary((value) => !value)} />
+                      </div>
+                    }
+                  >
+                    {!minLibrary && (
+                      <div id="biblioteca" className="grid grid-cols-1 gap-3 max-h-[540px] overflow-y-auto pr-2">
+                        {libraryWithTotals.map((meal) => (
+                          <div
+                            key={meal.id}
+                            className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-100 flex items-center gap-2">
+                                  <button
+                                    onClick={() => toggleFavorite(meal.id)}
+                                    title={favorites.has(meal.id) ? 'Remover dos favoritos' : 'Favoritar'}
+                                    className="text-amber-300"
+                                  >
+                                    {favorites.has(meal.id) ? '⭐' : '☆'}
+                                  </button>
+                                  <span className="truncate">{meal.name}</span>
+                                </div>
+                                <div className="text-sm text-slate-400">
+                                  {round(meal.kcal)} kcal • P {round(meal.protein)}g • C {round(meal.carbs)}g • G {round(meal.fats)}g
+                                </div>
+                              </div>
+                              <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">
+                                {meal.block} kcal
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(meal.tags || []).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                              {session?.user?.id && meal.created_by === session.user.id && (
+                                <button
+                                  onClick={() =>
+                                    deleteMealFromDatabase(meal.id).then((result) => result.ok && refreshLibrary())
+                                  }
+                                  className="px-2 py-1 text-xs rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                                  title="Excluir definitivamente (somente suas próprias refeições)"
+                                >
+                                  🗑️ Excluir
+                                </button>
+                              )}
+                              {slotKeys.map((key) => (
+                                <button
+                                  key={key}
+                                  onClick={() => addTo(key, meal)}
+                                  className="text-xs px-2 py-1 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10"
+                                >
+                                  + {`Refeição ${slotKeys.indexOf(key) + 1}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {libraryWithTotals.length === 0 && (
+                          <div className="text-slate-400 text-sm p-4 border border-dashed border-slate-700 rounded-xl text-center">
+                            Nenhuma refeição encontrada. Ajuste filtros/busca ou adicione dados ao Supabase.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section
+                    title="Meu Dia"
+                    right={
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        <select
+                          value={currentDayId}
+                          onChange={(event) => setCurrentDayId(event.target.value)}
+                          className="bg-slate-900 border border-blue-600 rounded px-3 py-1 text-sm text-blue-300 font-semibold"
+                        >
+                          {Object.keys(allDays)
+                            .sort(
+                              (a, b) =>
+                                parseInt(a.split('-')[1] || '0', 10) - parseInt(b.split('-')[1] || '0', 10),
+                            )
+                            .map((id, index) => (
+                              <option key={id} value={id}>{`Dia ${index + 1}`}</option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={duplicateCurrentDay}
+                          className="text-sm px-3 py-1 rounded border border-purple-500 text-purple-300 hover:bg-purple-900/40"
+                        >
+                          Duplicar
+                        </button>
+                        <button
+                          onClick={resetDay}
+                          className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-400 hover:bg-red-900/40"
+                        >
+                          Resetar
+                        </button>
+                        <button
+                          onClick={exportDay}
+                          className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                        >
+                          Exportar Dia
+                        </button>
+                        <input
+                          ref={importInputRef}
+                          type="file"
+                          accept="application/json"
+                          className="hidden"
+                          onChange={(event) => event.target.files?.[0] && importDay(event.target.files[0])}
+                        />
+                        <button
+                          onClick={() => importInputRef.current?.click()}
+                          className="text-sm px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                        >
+                          Importar Dia
+                        </button>
+                        <button
+                          onClick={addSlot}
+                          disabled={slotKeys.length >= 8}
+                          className={`text-sm px-3 py-1 rounded border ${
+                            slotKeys.length >= 8
+                              ? 'border-slate-700 text-slate-600 cursor-not-allowed'
+                              : 'border-blue-500 text-blue-300 hover:bg-blue-500/10'
+                          }`}
+                        >
+                          + Refeição
+                        </button>
+                        <MinButton on={minDay} toggle={() => setMinDay((value) => !value)} />
+                      </div>
+                    }
+                  >
+                    {!minDay && (
+                      <>
+                        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                            <div className="flex items-center justify-between">
+                              <div className="text-slate-300 font-semibold">Água</div>
+                              <div className="text-xs text-slate-400">{round(water)} / {WATER_GOAL} ml</div>
+                            </div>
+                            <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
+                              <div style={{ width: `${waterPct}%` }} className="h-3 bg-emerald-500"></div>
+                            </div>
+                            <div className="mt-3 flex gap-2 flex-wrap">
+                              <button
+                                onClick={() => addWater(250)}
+                                className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20"
+                              >
+                                +250
+                              </button>
+                              <button
+                                onClick={() => addWater(500)}
+                                className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20"
+                              >
+                                +500
+                              </button>
+                              <button
+                                onClick={() => addWater(750)}
+                                className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-300 hover:bg-emerald-900/20"
+                              >
+                                +750
+                              </button>
+                              <input
+                                type="number"
+                                value={water}
+                                onChange={(event) => setWater(event.target.value)}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"
+                              />
+                              <button
+                                onClick={() => setWater(0)}
+                                className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-4 rounded-xl bg-slate-900 border border-slate-700">
+                            <div className="flex items-center justify-between">
+                              <div className="text-slate-300 font-semibold">Sono (noite anterior)</div>
+                              <div className="text-xs text-slate-400">{round(sleep, 1)} / {SLEEP_GOAL} h</div>
+                            </div>
+                            <div className="mt-2 h-3 bg-slate-800 rounded overflow-hidden">
+                              <div style={{ width: `${sleepPct}%` }} className="h-3 bg-indigo-500"></div>
+                            </div>
+                            <div className="mt-3 flex gap-2 flex-wrap items-center">
+                              <button
+                                onClick={() => setSleep(Math.min(12, sleep + 0.5))}
+                                className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20"
+                              >
+                                +0,5h
+                              </button>
+                              <button
+                                onClick={() => setSleep(Math.max(0, sleep - 0.5))}
+                                className="text-xs px-2 py-1 rounded border border-indigo-600 text-indigo-300 hover:bg-indigo-900/20"
+                              >
+                                -0,5h
+                              </button>
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                max="12"
+                                value={sleep}
+                                onChange={(event) => setSleep(event.target.value)}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs w-24 ml-auto"
+                              />
+                              <button
+                                onClick={() => setSleep(0)}
+                                className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700/40"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div id="meu-dia" className="grid md:grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                          {slotKeys.map((key) => (
+                            <div key={key} className="rounded-xl border border-slate-700 bg-slate-900 p-4 card-compact">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="font-semibold text-slate-100 flex items-center gap-3">
+                                  <span>{getSlotLabel(key)}</span>
+                                  <span className="text-[11px] text-slate-300 border border-slate-600 rounded px-2 py-0.5">
+                                    {round(slotTotals[key].kcal)} kcal • P {round(slotTotals[key].protein)} • C {round(slotTotals[key].carbs)} • G {round(slotTotals[key].fats)}
+                                  </span>
+                                </div>
+                                {slotKeys.length > 1 && (
+                                  <button
+                                    onClick={() => removeSlot(key)}
+                                    className="text-xs px-2 py-1 rounded border border-red-700 text-red-500 hover:bg-red-900/20"
+                                  >
+                                    Remover Slot
+                                  </button>
+                                )}
+                              </div>
+
+                              {(!day[key] || day[key].length === 0) ? (
+                                <div className="text-slate-500 text-sm p-4 border border-dashed border-slate-700 rounded-lg text-center">
+                                  Vazio — adicione refeições da biblioteca.
+                                </div>
+                              ) : (
+                                <ul className="space-y-3">
+                                  {day[key].map((meal, index) => (
+                                    <MealItem
+                                      key={`${key}-${index}`}
+                                      slotKey={key}
+                                      index={index}
+                                      meal={meal}
+                                      slotKeys={slotKeys}
+                                      resetMealIngredients={resetMealIngredients}
+                                      duplicateMealTo={duplicateMealTo}
+                                      toggleLock={toggleLock}
+                                      removeMeal={removeMeal}
+                                      updateIngredientPortion={updateIngredientPortion}
+                                      toggleIngredientIncluded={toggleIngredientIncluded}
+                                      removeIngredient={removeIngredient}
+                                      addQuickIngredient={addQuickIngredient}
+                                      getSlotLabel={getSlotLabel}
+                                    />
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-700 pt-4">
+                          <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                            <div className="text-slate-400 text-xs">Calorias</div>
+                            <div className="text-xl font-bold">{round(totals.kcal)}</div>
+                          </div>
+                          <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                            <div className="text-slate-400 text-xs">Proteínas</div>
+                            <div className="text-xl font-bold">{round(totals.protein)} g</div>
+                          </div>
+                          <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                            <div className="text-slate-400 text-xs">Carboidratos</div>
+                            <div className="text-xl font-bold">{round(totals.carbs)} g</div>
+                          </div>
+                          <div className="p-3 rounded bg-slate-700 border border-slate-600 text-center">
+                            <div className="text-slate-400 text-xs">Gorduras</div>
+                            <div className="text-xl font-bold">{round(totals.fats)} g</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </div>
+            </main>
+
+            <footer className="max-w-7xl mx-auto px-6 py-10 text-center text-xs text-slate-500">
+              v6.3 — Biblioteca dinâmica (Supabase), sincronização de estado e gestão diária.
+            </footer>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
 </html>
-
-
-
