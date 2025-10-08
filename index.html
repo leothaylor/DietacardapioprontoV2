@@ -13,15 +13,30 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
-    /* seu CSS aqui (ok manter igual) */
+    /* seu CSS opcional */
+    html,body{background:#0a0a1a;color:#cbd5e1}
   </style>
 </head>
 <body class="bg-[#0a0a1a] text-slate-200">
   <div id="root"></div>
 
-  <!-- TODO: cole aqui dentro TODO o seu JS/JSX (exatamente como já está) -->
+  <!-- TODO: coloque TODO o seu JS/JSX neste bloco -->
   <script type="text/babel">
-    /* SEU CÓDIGO AQUI */
+    // ==== CONFIG SUPABASE (no topo) ====
+    const SUPABASE_URL = 'https://grnwskvvbglclnijbgdq.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybndza3Z2YmdsY2xuaWpiZ2RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MDA4OTEsImV4cCI6MjA3NTM3Njg5MX0.MqkWLIvU9DQHzudm-OLkSKEwmwxUDUBuGgHU_9F1baM';
+    const AVATAR_BUCKET = 'avatars';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // (⚠️ remova qualquer "if (SUPABASE_URL.includes('YOUR_') ...)" antigo
+    //     deixado FORA de <script>. Se quiser manter a checagem, deixe aqui dentro.)
+
+    // ==== COLE AQUI TODO O RESTANTE DO SEU APP ====
+    // Seu código que começa com utilitários, componentes, App(), ReactDOM.render, etc.
+    // (o conteúdo gigantesco que você enviou — inteiro — deve ficar aqui dentro)
+
+    // Exemplo final de montagem (já existe no seu código):
+    // ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
@@ -1475,6 +1490,7 @@ const AVATAR_BUCKET = 'avatars';
   </script>
 </body>
 </html>
+
 
 
 
