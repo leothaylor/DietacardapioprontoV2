@@ -215,7 +215,7 @@
       }
     }
 
-    // ===== Supabase: inserir e deletar refeição =====
+   // ===== Supabase: inserir e deletar refeição =====
     async function addMealToDB({ name, kcal, protein, carbs, fats, block, tags }) {
       const tagArray = (tags || '').split(',').map(t => t.trim()).filter(Boolean);
 
@@ -223,6 +223,53 @@
       const uid = u?.user?.id || null;
       if (!uid) return { success: false, error: 'É preciso estar logado para adicionar.' };
 
+      const payload = {
+        nome: name,
+        kcal: Number(kcal) || 0,
+        proteina: Number(protein) || 0,
+        carboidrato: Number(carbs) || 0,
+        gordura: Number(fats) || 0,
+        bloco: block,
+        tags: tagArray,
+        created_by: uid // 👈 IMPORTANTE para passar na policy
+      };
+
+      const { data, error } = await sb
+        .from('refeicoes_biblioteca')
+        .insert(payload)
+        .select('id, nome, kcal, proteina, carboidrato, gordura, bloco, tags, created_by')
+        .single();
+
+      if (error) return { success: false, error: error.message };
+
+      const item = data;
+      const meal = {
+        id: item.id,
+        name: item.nome,
+        block: item.bloco,
+        tags: item.tags,
+        created_by: item.created_by,
+        ingredients: [{ name: item.nome, baseKcal: item.kcal, protein: item.proteina, carbs: item.carboidrato, fats: item.gordura, portion: 1 }]
+      };
+      return { success: true, item: meal };
+    }
+
+    async function deleteMealFromDB(id) {
+      if (!id) return { ok: false, error: 'ID inválido.' };
+
+      const { data: u } = await sb.auth.getUser();
+      const uid = u?.user?.id || null;
+      if (!uid) return { ok: false, error: 'É preciso estar logado para excluir.' };
+
+      const { error } = await sb
+        .from('refeicoes_biblioteca')
+        .delete()
+        .eq('id', id)
+        .eq('created_by', uid);
+
+      if (error) return { ok: false, error: error.message };
+      return { ok: true };
+    }
       const payload = {
         nome: name,
         kcal: Number(kcal) || 0,
@@ -1426,5 +1473,6 @@
   </script>
 </body>
 </html>
+
 
 
